@@ -1,0 +1,71 @@
+services:
+  - type: web
+    name: ai-fashion-api
+    runtime: docker
+    dockerfilePath: apps/api/Dockerfile
+    dockerContext: .
+    region: oregon
+    plan: starter
+
+    # Auto-deploy from main branch
+    branch: main
+    autoDeploy: true
+
+    # Health check — Render uses this before routing traffic
+    healthCheckPath: /health
+
+    # Environment variables (set in Render dashboard as secrets)
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 4000
+      - key: MONGODB_DB_NAME
+        value: ai-fashion-stylist
+      - key: DAILY_QUOTA_LIMIT
+        value: 5
+      - key: GLOBAL_RATE_LIMIT_RPM
+        value: 100
+      - key: GEMINI_MODEL
+        value: gemini-1.5-flash
+      - key: OPENAI_MODEL
+        value: gpt-4o-mini
+      - key: CACHE_TTL_TEXT_HOURS
+        value: 6
+      - key: CACHE_TTL_TREND_HOURS
+        value: 24
+      - key: CACHE_TTL_WEATHER_MINS
+        value: 30
+      - key: LOG_LEVEL
+        value: info
+
+      # Secrets — set via Render dashboard or env groups
+      - key: MONGODB_URI
+        sync: false
+      - key: CLERK_SECRET_KEY
+        sync: false
+      - key: CLERK_WEBHOOK_SECRET
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: REPLICATE_API_TOKEN
+        sync: false
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      - key: WEATHER_API_KEY
+        sync: false
+      - key: ALLOWED_ORIGINS
+        sync: false
+
+    # Scale down on free tier, keep alive in production
+    scaling:
+      minInstances: 1
+      maxInstances: 3
+      targetMemoryPercent: 80
+      targetCPUPercent: 80

@@ -1,0 +1,23 @@
+name: Security Audit
+
+on:
+  schedule:
+    - cron: '0 9 * * 1'    # Every Monday 09:00 UTC
+  workflow_dispatch:
+
+jobs:
+  audit:
+    name: pnpm audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v3
+        with: { version: '9.0.0' }
+      - uses: actions/setup-node@v4
+        with: { node-version: '20', cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - name: Audit for vulnerabilities
+        run: pnpm audit --audit-level=high
+        continue-on-error: true
+      - name: Check for outdated critical deps
+        run: pnpm outdated || true

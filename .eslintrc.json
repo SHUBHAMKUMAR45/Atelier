@@ -1,0 +1,26 @@
+{
+  "root": true,
+  "parser": "@typescript-eslint/parser",
+  "plugins": ["@typescript-eslint"],
+  "extends": [
+    "eslint:recommended",
+    "plugin:@typescript-eslint/recommended"
+  ],
+  "rules": {
+    "@typescript-eslint/no-explicit-any":   "error",
+    "@typescript-eslint/no-unused-vars":    ["error", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
+    "no-console":                           ["warn", { "allow": ["error", "warn", "info"] }]
+  },
+  "overrides": [
+    {
+      "files": ["apps/web/**/*.{ts,tsx}"],
+      "extends": ["next/core-web-vitals"]
+    },
+    {
+      "files": ["**/*.test.ts", "**/*.spec.ts"],
+      "env": { "jest": true },
+      "rules": { "no-console": "off" }
+    }
+  ],
+  "ignorePatterns": ["node_modules/", "dist/", ".next/", ".turbo/"]
+}

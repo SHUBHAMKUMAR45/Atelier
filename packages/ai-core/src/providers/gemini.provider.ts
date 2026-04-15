@@ -1,0 +1,55 @@
+import { GoogleGenerativeAI } from '@google/generative-ai'
+import { AIOutfitOutputSchema, AITrendOutputSchema } from '../../../shared/src/schemas'
+import { extractJSON } from '../../../shared/src/utils'
+import type { AIOutfitOutput, AITrendOutput } from '../../../shared/src/schemas'
+
+export interface GeminiProviderConfig {
+  apiKey:  string
+  model?:  string
+}
+
+export class GeminiProvider {
+  private readonly client: GoogleGenerativeAI
+  private readonly modelName: string
+
+  constructor(config: GeminiProviderConfig) {
+    this.client    = new GoogleGenerativeAI(config.apiKey)
+    this.modelName = config.model ?? 'gemini-1.5-flash'
+  }
+
+  async generateOutfit(prompt: string): Promise<AIOutfitOutput> {
+    const model = this.client.getGenerativeModel({
+      model: this.modelName,
+      generationConfig: { temperature: 0.7, topP: 0.8, topK: 40, maxOutputTokens: 2048 },
+    })
+    const result  = await model.generateContent(`${OUTFIT_SYSTEM_PROMPT}\n\n${prompt}`)
+    const rawText = result.response.text()
+    const parsed  = extractJSON(rawText)
+    if (!parsed) throw new Error('Gemini: failed to extract JSON')
+    const validated = AIOutfitOutputSchema.safeParse(parsed)
+    if (!validated.success) throw new Error(`Gemini: schema validation failed — ${validated.error.message}`)
+    return validated.data
+  }
+
+  async generateTrends(prompt: string): Promise<AITrendOutput> {
+    const model = this.client.getGenerativeModel({
+      model: this.modelName,
+      generationConfig: { temperature: 0.5, maxOutputTokens: 1024 },
+    })
+    const result  = await model.generateContent(`${TRENDS_SYSTEM_PROMPT}\n\n${prompt}`)
+    const rawText = result.response.text()
+    const parsed  = extractJSON(rawText)
+    if (!parsed) throw new Error('Gemini: failed to extract trends JSON')
+    const validated = AITrendOutputSchema.safeParse(parsed)
+    if (!validated.success) throw new Error(`Gemini: trends validation failed — ${validated.error.message}`)
+    return validated.data
+  }
+}
+
+const OUTFIT_SYSTEM_PROMPT = `You are an expert fashion stylist AI. Respond with ONLY valid JSON matching:
+{"title":string,"description":string,"items":[{"category":"top"|"bottom"|"shoes"|"outerwear"|"accessory"|"dress"|"suit","name":string,"description":string,"color":string,"material":string,"style":string,"priceRange":"budget"|"mid"|"luxury","searchTerms":string[]}],"stylingTips":string[],"colorPalette":string[],"confidenceScore":number}
+colorPalette must use hex #RRGGBB. Include at least top+bottom+shoes. Return ONLY JSON.`.trim()
+
+const TRENDS_SYSTEM_PROMPT = `You are a fashion trend analyst. Respond ONLY with valid JSON:
+{"trends":[{"trend":string,"description":string,"relevance":number}],"location":string,"season":string,"updatedAt":string}
+Return ONLY the JSON object.`.trim()

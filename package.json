@@ -1,0 +1,28 @@
+{
+  "name": "ai-fashion-stylist",
+  "version": "1.0.0",
+  "private": true,
+  "packageManager": "pnpm@9.0.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "type-check": "turbo run type-check",
+    "test": "turbo run test",
+    "clean": "turbo run clean && rm -rf node_modules"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "prettier": "^3.2.0",
+    "turbo": "^2.9.6",
+    "typescript": "^5.4.0"
+  },
+  "dependencies": {
+    "clsx": "^2.1.0",
+    "swr": "^2.2.5"
+  }
+}

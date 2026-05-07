@@ -1,0 +1,53 @@
+{
+  "expo": {
+    "name": "Atelier",
+    "slug": "ai-fashion-stylist",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#F5F0E8"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.atelier.fashionstylist",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Used to provide location-relevant outfit recommendations",
+        "NSPhotoLibraryUsageDescription": "Used to let you upload clothing photos",
+        "NSCameraUsageDescription": "Used to photograph clothing items"
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#F5F0E8"
+      },
+      "package": "com.atelier.fashionstylist",
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE"
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-location",
+        { "locationAlwaysAndWhenInUsePermission": "Allow Atelier to access your location for outfit recommendations." }
+      ],
+      [
+        "expo-image-picker",
+        { "photosPermission": "Allow Atelier to access your photos." }
+      ]
+    ],
+    "scheme": "atelier",
+    "experiments": { "typedRoutes": true },
+    "extra": {
+      "eas": { "projectId": "your-eas-project-id" }
+    }
+  }
+}

@@ -1,0 +1,11 @@
+User-agent: *
+Disallow: /dashboard
+Disallow: /recommend
+Disallow: /history
+Disallow: /profile
+Disallow: /trends
+Disallow: /api/
+
+Allow: /
+Allow: /sign-in
+Allow: /sign-up

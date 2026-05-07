@@ -1,0 +1,71 @@
+{
+  "version": 2,
+  "framework": "nextjs",
+  "buildCommand": "pnpm run build",
+  "outputDirectory": ".next",
+  "installCommand": "pnpm install",
+  "regions": ["sfo1"],
+  "env": {
+    "NEXT_PUBLIC_API_URL":                  "@next_public_api_url",
+    "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY":    "@next_public_clerk_publishable_key",
+    "CLERK_SECRET_KEY":                     "@clerk_secret_key",
+    "NEXT_PUBLIC_CLERK_SIGN_IN_URL":        "/sign-in",
+    "NEXT_PUBLIC_CLERK_SIGN_UP_URL":        "/sign-up",
+    "NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL":  "/dashboard",
+    "NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL":  "/profile",
+    "NEXT_PUBLIC_SENTRY_DSN":               "@next_public_sentry_dsn"
+  },
+  "images": {
+    "remotePatterns": [
+      { "protocol": "https", "hostname": "images.unsplash.com" },
+      { "protocol": "https", "hostname": "res.cloudinary.com" },
+      { "protocol": "https", "hostname": "replicate.delivery" },
+      { "protocol": "https", "hostname": "pbxt.replicate.delivery" }
+    ],
+    "formats": ["image/avif", "image/webp"],
+    "minimumCacheTTL": 3600
+  },
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "strict-origin-when-cross-origin"
+        },
+        {
+          "key": "Strict-Transport-Security",
+          "value": "max-age=63072000; includeSubDomains; preload"
+        },
+        {
+          "key": "Permissions-Policy",
+          "value": "camera=(), microphone=(), geolocation=(self), interest-cohort=()"
+        },
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://clerk.com https://*.clerk.accounts.dev; connect-src 'self' https://api.clerk.com https://*.clerk.accounts.dev wss://*.clerk.accounts.dev; img-src 'self' data: blob: https://images.unsplash.com https://res.cloudinary.com https://replicate.delivery https://pbxt.replicate.delivery https://img.clerk.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+        }
+      ]
+    },
+    {
+      "source": "/_next/static/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+      ]
+    },
+    {
+      "source": "/favicon.svg",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=86400" }
+      ]
+    }
+  ]
+}

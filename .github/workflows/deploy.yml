@@ -1,0 +1,164 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false       # Never cancel in-flight deploys
+
+env:
+  NODE_VERSION: '20'
+  PNPM_VERSION: '9.0.0'
+  REGISTRY:     ghcr.io
+  IMAGE_NAME:   ${{ github.repository }}/api
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────
+  # Gate: must pass CI first
+  # ─────────────────────────────────────────────────────────────────
+  ci-gate:
+    name: CI Gate
+    uses: ./.github/workflows/ci.yml
+    secrets: inherit
+
+  # ─────────────────────────────────────────────────────────────────
+  # Build & push Docker image to GHCR
+  # ─────────────────────────────────────────────────────────────────
+  build-api:
+    name: Build & Push API Image
+    needs: ci-gate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image-tag: ${{ steps.meta.outputs.tags }}
+      sha-tag:   ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,prefix=sha-
+            type=ref,event=branch
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context:    .
+          file:       apps/api/Dockerfile
+          push:       true
+          tags:       ${{ steps.meta.outputs.tags }}
+          labels:     ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to:   type=gha,mode=max
+          build-args: |
+            BUILD_SHA=${{ github.sha }}
+
+  # ─────────────────────────────────────────────────────────────────
+  # Deploy API to Render via deploy hook
+  # ─────────────────────────────────────────────────────────────────
+  deploy-api:
+    name: Deploy API → Render
+    needs: build-api
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url:  ${{ vars.API_URL }}
+    steps:
+      - name: Trigger Render deploy
+        run: |
+          curl -s -o /dev/null -w "%{http_code}" \
+            -X POST "${{ secrets.RENDER_DEPLOY_HOOK_URL }}" \
+            -H "Content-Type: application/json" \
+            -d '{"imageUrl":"${{ needs.build-api.outputs.sha-tag }}"}'
+
+      - name: Wait for deployment
+        run: |
+          echo "Waiting 60s for Render to boot…"
+          sleep 60
+
+      - name: Health check
+        run: |
+          MAX=10
+          for i in $(seq 1 $MAX); do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${{ vars.API_URL }}/health")
+            if [ "$STATUS" = "200" ]; then
+              echo "✅ Health check passed (attempt $i)"
+              exit 0
+            fi
+            echo "Attempt $i/$MAX — status $STATUS — retrying in 15s"
+            sleep 15
+          done
+          echo "❌ Health check failed after $MAX attempts"
+          exit 1
+
+  # ─────────────────────────────────────────────────────────────────
+  # Deploy Web to Vercel
+  # ─────────────────────────────────────────────────────────────────
+  deploy-web:
+    name: Deploy Web → Vercel
+    needs: ci-gate
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url:  ${{ vars.WEB_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with: { version: '${{ env.PNPM_VERSION }}' }
+
+      - uses: actions/setup-node@v4
+        with: { node-version: '${{ env.NODE_VERSION }}', cache: pnpm }
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Deploy to Vercel (production)
+        run: |
+          npx vercel deploy \
+            --token=${{ secrets.VERCEL_TOKEN }} \
+            --prod \
+            --yes \
+            --cwd apps/web
+        env:
+          VERCEL_ORG_ID:     ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+      - name: Web health check
+        run: |
+          sleep 30
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${{ vars.WEB_URL }}")
+          if [ "$STATUS" = "200" ]; then echo "✅ Web deployed"; else echo "❌ Web check failed: $STATUS"; exit 1; fi
+
+  # ─────────────────────────────────────────────────────────────────
+  # Notify on failure
+  # ─────────────────────────────────────────────────────────────────
+  notify-failure:
+    name: Notify on Failure
+    needs: [deploy-api, deploy-web]
+    if: failure()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post failure summary
+        run: |
+          echo "::error::Deploy failed — check logs above"
+          echo "Commit: ${{ github.sha }}"
+          echo "Actor:  ${{ github.actor }}"

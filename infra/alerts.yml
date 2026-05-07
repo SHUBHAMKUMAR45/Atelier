@@ -1,0 +1,52 @@
+groups:
+  - name: ai-fashion-api
+    rules:
+      - alert: HighErrorRate
+        expr: rate(ai_fashion_http_requests_total{status_code=~"5.."}[5m]) > 0.05
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High 5xx error rate (>5%)"
+          description: "Error rate {{ $value | humanizePercentage }} over last 5m"
+
+      - alert: HighP99Latency
+        expr: histogram_quantile(0.99, rate(ai_fashion_http_request_duration_seconds_bucket[5m])) > 3
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "P99 latency >3s"
+          description: "P99 latency is {{ $value }}s"
+
+      - alert: QueueDepthHigh
+        expr: ai_fashion_queue_depth{queue="image-generation"} > 100
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Image generation queue depth > 100"
+
+      - alert: CircuitBreakerOpen
+        expr: ai_fashion_circuit_breaker_state > 1
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Circuit breaker OPEN for {{ $labels.provider }}"
+
+      - alert: HallucinationRejectionSpike
+        expr: rate(ai_fashion_hallucination_rejections_total[5m]) > 0.1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "AI hallucination rejections spiking"
+
+      - alert: QuotaExhaustion
+        expr: rate(ai_fashion_quota_exceeded_total[1h]) > 50
+        for: 5m
+        labels:
+          severity: info
+        annotations:
+          summary: "High quota exhaustion rate — consider raising limits"

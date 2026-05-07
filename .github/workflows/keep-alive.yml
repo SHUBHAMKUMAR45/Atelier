@@ -1,0 +1,17 @@
+name: Keep Alive
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'   # Every 10 minutes
+  workflow_dispatch:
+
+jobs:
+  ping:
+    name: Ping API Health
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ping health endpoint
+        run: node scripts/keep-alive.mjs
+        env:
+          API_URL: ${{ vars.API_URL }}

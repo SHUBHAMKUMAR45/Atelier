@@ -1,0 +1,29 @@
+name: Data Lifecycle
+
+on:
+  schedule:
+    - cron: '0 2 * * *'    # 2:00 AM UTC daily
+  workflow_dispatch:         # Manual trigger
+
+jobs:
+  lifecycle:
+    name: Run Data Lifecycle Job
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with: { version: '9.0.0' }
+
+      - uses: actions/setup-node@v4
+        with: { node-version: '20', cache: pnpm }
+
+      - name: Install deps
+        run: pnpm install --frozen-lockfile --filter @ai-fashion/api
+
+      - name: Run lifecycle job
+        run: node --import tsx/esm scripts/lifecycle.ts
+        env:
+          MONGODB_URI:      ${{ secrets.MONGODB_URI }}
+          MONGODB_DB_NAME:  ai-fashion-stylist

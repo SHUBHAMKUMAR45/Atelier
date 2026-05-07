@@ -1,0 +1,28 @@
+global:
+  scrape_interval:     15s
+  evaluation_interval: 15s
+  external_labels:
+    env: production
+
+rule_files:
+  - 'alerts.yml'
+
+scrape_configs:
+  - job_name: 'ai-fashion-api'
+    static_configs:
+      - targets: ['api:4000']
+    metrics_path: '/metrics'
+    scheme: http
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    params:
+      format: ['prometheus']
+
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis:6379']
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []

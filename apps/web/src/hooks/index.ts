@@ -1,31 +1,31 @@
 'use client'
 
 import useSWR, { mutate } from 'swr'
-import { useAuth }        from '@clerk/nextjs'
+import { useState } from 'react'
+
+function useSWRIsSlow() { return useState(false) }
+
 import { api, APIError }  from '../lib/api-client'
 import { useUserStore, useRecommendStore } from '../store'
 import { toast }          from 'sonner'
-import type { RecommendRequest } from '../../../../packages/shared/src/schemas'
+import type { RecommendRequest } from '../../../../packages/shared/src/schemas/index'
 
 // ─────────────────────────────────────────────────────────────────
 // USE PROFILE
 // ─────────────────────────────────────────────────────────────────
 
 export function useProfile() {
-  const { getToken } = useAuth()
   const { setProfile } = useUserStore()
 
-  const { data, error, isLoading } = useSWR(
+  const { data, error, isLoading, mutate: refresh } = useSWR(
     'profile',
     async () => {
       try {
-        const token = await getToken()
-        if (!token) throw new Error('No token')
-        const profile = await api.profile.get(token)
+        const profile = await api.profile.get()
         setProfile(profile)
         return profile
       } catch (err) {
-        if (err instanceof APIError && err.statusCode === 404) {
+        if (err instanceof APIError && err.status === 404) {
           setProfile(null)
           return null
         }
@@ -35,7 +35,7 @@ export function useProfile() {
     { revalidateOnFocus: false, dedupingInterval: 60_000 },
   )
 
-  return { profile: data, error, isLoading }
+  return { profile: data, error, isLoading, refresh }
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -43,15 +43,12 @@ export function useProfile() {
 // ─────────────────────────────────────────────────────────────────
 
 export function useQuota() {
-  const { getToken } = useAuth()
   const { setQuota } = useUserStore()
 
   const { data, mutate: refresh } = useSWR(
     'quota',
     async () => {
-      const token = await getToken()
-      if (!token) throw new Error('No token')
-      const quota = await api.profile.getQuota(token)
+      const quota = await api.profile.getQuota()
       setQuota(quota)
       return quota
     },
@@ -68,7 +65,6 @@ export function useQuota() {
 const STEPS = ['analyzing', 'styling', 'finalizing'] as const
 
 export function useRecommend() {
-  const { getToken }  = useAuth()
   const {
     setGenerating,
     setGenerationStep,
@@ -77,10 +73,13 @@ export function useRecommend() {
     reset,
   } = useRecommendStore()
 
+  const [isSlow, setIsSlow] = useSWRIsSlow()
+
   async function generate(request: RecommendRequest) {
     reset()
     setGenerating(true)
     setGenerationStep('analyzing')
+    setIsSlow(false)
 
     // Animate progress steps
     const stepTimer = setInterval(() => {
@@ -90,12 +89,13 @@ export function useRecommend() {
       })
     }, 3_000)
 
+    // Show "taking longer than usual" after 7s
+    const slowTimer = setTimeout(() => setIsSlow(true), 7_000)
+
     try {
-      const token = await getToken()
-      if (!token) throw new Error('Authentication required')
+      const result = await api.recommend.generate(request)
 
-      const result = await api.recommend.generate(token, request)
-
+      clearTimeout(slowTimer)
       clearInterval(stepTimer)
       setGenerationStep('done')
       setCurrent(result)
@@ -105,19 +105,26 @@ export function useRecommend() {
 
       return result
     } catch (err) {
+      clearTimeout(slowTimer)
       clearInterval(stepTimer)
+      setIsSlow(false)
       setGenerationStep('error')
 
-      const message = err instanceof APIError ? err.message : 'Something went wrong'
+      const message = err instanceof APIError 
+        ? err.message 
+        : err instanceof Error 
+        ? err.message 
+        : 'Something went wrong'
       setError(message)
       toast.error(message)
       throw err
     } finally {
+      setIsSlow(false)
       setGenerating(false)
     }
   }
 
-  return { generate }
+  return { generate, isSlow }
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -125,17 +132,15 @@ export function useRecommend() {
 // ─────────────────────────────────────────────────────────────────
 
 export function useHistory(page = 1) {
-  const { getToken } = useAuth()
-
-  return useSWR(
+  const { data, error, isLoading, mutate: refresh } = useSWR(
     ['history', page],
     async () => {
-      const token = await getToken()
-      if (!token) throw new Error('No token')
-      return api.recommend.getHistory(token, page)
+      return api.recommend.getHistory(page)
     },
     { revalidateOnFocus: false },
   )
+
+  return { data, error, isLoading, refresh }
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -143,13 +148,9 @@ export function useHistory(page = 1) {
 // ─────────────────────────────────────────────────────────────────
 
 export function useFeedback() {
-  const { getToken } = useAuth()
-
   async function submit(id: string, rating: 'like' | 'dislike') {
     try {
-      const token = await getToken()
-      if (!token) throw new Error('No token')
-      await api.feedback.submit(token, id, { rating })
+      await api.feedback.submit(id, { rating })
       toast.success(rating === 'like' ? 'Saved to your collection ✦' : 'Got it — we\'ll improve')
     } catch {
       toast.error('Could not save feedback')
@@ -164,17 +165,15 @@ export function useFeedback() {
 // ─────────────────────────────────────────────────────────────────
 
 export function useTrends() {
-  const { getToken } = useAuth()
-
-  return useSWR(
+  const { data, error, isLoading, mutate: refresh } = useSWR(
     'trends',
     async () => {
-      const token = await getToken()
-      if (!token) throw new Error('No token')
-      return api.trends.get(token)
+      return api.trends.get()
     },
     { revalidateOnFocus: false, dedupingInterval: 3_600_000 }, // 1h client-side dedup
   )
+
+  return { data, error, isLoading, refresh }
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -182,16 +181,12 @@ export function useTrends() {
 // ─────────────────────────────────────────────────────────────────
 
 export function useWeather(lat?: number, lon?: number) {
-  const { getToken } = useAuth()
-
   const key = lat && lon ? `weather-${lat}-${lon}` : 'weather-default'
 
   const { data, error, isLoading } = useSWR(
     key,
     async () => {
-      const token = await getToken()
-      if (!token) return null
-      return api.weather.get(token, lat ?? 40.7128, lon ?? -74.006)
+      return api.weather.get(lat ?? 40.7128, lon ?? -74.006)
     },
     { revalidateOnFocus: false, dedupingInterval: 1_800_000 /* 30 min */ },
   )
@@ -204,36 +199,29 @@ export function useWeather(lat?: number, lon?: number) {
 // ─────────────────────────────────────────────────────────────────
 
 export function useWardrobe() {
-  const { getToken } = useAuth()
-
   const { data, error, isLoading, mutate: refresh } = useSWR(
     'wardrobe',
     async () => {
-      const token = await getToken()
-      if (!token) throw new Error('No token')
-      return api.wardrobe.get(token)
+      return api.wardrobe.get()
     },
     { revalidateOnFocus: false, dedupingInterval: 30_000 }
   )
 
-  const addItem = async (item: { title: string; category: string; imageUrl: string; color?: string }) => {
+  const addItem = async (item: { name: string; category: 'top' | 'bottom' | 'shoes' | 'outerwear' | 'accessory' | 'dress' | 'suit'; imageUrl: string; color?: string }) => {
     try {
-      const token = await getToken()
-      if (!token) return
-      const newItem = await api.wardrobe.add(token, item)
+      const newItem = await api.wardrobe.add(item)
       await refresh()
-      toast.success(`${item.title} added to wardrobe`)
+      toast.success(`${item.name} added to wardrobe`)
       return newItem
     } catch {
       toast.error('Failed to add item')
+      return null
     }
   }
 
   const deleteItem = async (id: string) => {
     try {
-      const token = await getToken()
-      if (!token) return
-      await api.wardrobe.delete(token, id)
+      await api.wardrobe.delete(id)
       await refresh()
       toast.success('Item removed')
     } catch {

@@ -15,7 +15,7 @@ interface HealthData {
   timestamp: string
 }
 
-export default function AdminPage() {
+export default function AdminPage(): React.JSX.Element {
   const [health, setHealth]     = useState<HealthData | null>(null)
   const [loading, setLoading]   = useState(true)
   const [error, setError]       = useState<string | null>(null)
@@ -57,7 +57,7 @@ export default function AdminPage() {
       <div className="max-w-5xl mx-auto">
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-white">System Admin</h1>
+            <h1 className="font-display text-3xl font-bold text-white tracking-tight">System Admin</h1>
             <p className="text-gray-400 mt-1">Production health &amp; observability</p>
           </div>
           <button

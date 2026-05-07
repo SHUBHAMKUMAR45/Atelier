@@ -10,6 +10,10 @@
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "jsx": "preserve",
+    "types": [
+      "node",
+      "@react-three/fiber"
+    ],
     "incremental": true,
     "noEmit": true,
     "allowJs": true,
@@ -20,7 +24,7 @@
         "./src/*"
       ],
       "@ai-fashion/shared": [
-        "../../packages/shared/src"
+        "../../packages/shared/src/index.ts"
       ],
       "@ai-fashion/shared/*": [
         "../../packages/shared/src/*"
@@ -34,12 +38,14 @@
     "isolatedModules": true
   },
   "include": [
-    "next-env.d.ts",
     "**/*.ts",
     "**/*.tsx",
+    ".next/types/routes.d.ts",
+    "next-env.d.ts",
     ".next/types/**/*.ts"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    ".next"
   ]
 }

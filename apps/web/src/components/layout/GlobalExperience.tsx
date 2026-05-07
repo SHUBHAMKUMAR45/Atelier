@@ -1,11 +1,21 @@
 'use client'
+/// <reference types="@react-three/fiber" />
 
 import { useRef, useMemo, useState } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { Environment, Float, MeshDistortMaterial, Stars, ContactShadows, PerformanceMonitor } from '@react-three/drei'
 import * as THREE from 'three'
 
-function StyleNode({ position, color, distort, speed, scrollOffset = 0, geometry }: any) {
+interface StyleNodeProps {
+  position:     [number, number, number]
+  color:        string
+  distort:      number
+  speed:        number
+  scrollOffset?: number
+  geometry:     THREE.BufferGeometry
+}
+
+function StyleNode({ position, color, distort, speed, scrollOffset = 0, geometry }: StyleNodeProps) {
   const meshRef = useRef<THREE.Mesh>(null)
   
   useFrame((state) => {
@@ -36,9 +46,10 @@ function StyleNode({ position, color, distort, speed, scrollOffset = 0, geometry
 }
 
 function GlobalScene({ isLowPerf }: { isLowPerf: boolean }) {
-  const sgArgs = isLowPerf ? [1, 16, 16] : [1, 32, 32]
-  // @ts-ignore
-  const sphereGeo = useMemo(() => new THREE.SphereGeometry(...sgArgs), [isLowPerf])
+  const sphereGeo = useMemo(() => {
+    const sgArgs = isLowPerf ? [1, 16, 16] : [1, 32, 32]
+    return new THREE.SphereGeometry(...sgArgs)
+  }, [isLowPerf])
 
   useFrame((state) => {
     state.camera.position.y = THREE.MathUtils.lerp(state.camera.position.y, -(window.scrollY * 0.002), 0.1)
@@ -75,12 +86,12 @@ function GlobalScene({ isLowPerf }: { isLowPerf: boolean }) {
   )
 }
 
-export function GlobalExperience() {
+export function GlobalExperience(): React.JSX.Element {
   const [dpr, setDpr] = useState(1.5)
   const [isLowPerf, setIsLowPerf] = useState(false)
 
   return (
-    <div className="fixed inset-0 z-0 pointer-events-none bg-ink-900">
+    <div className="fixed inset-0 z-[-1] pointer-events-none bg-white">
       <Canvas camera={{ position: [0, 0, 10], fov: 45 }} dpr={dpr}>
         <PerformanceMonitor 
           onDecline={() => { setIsLowPerf(true); setDpr(1) }} 

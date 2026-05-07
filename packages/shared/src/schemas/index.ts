@@ -134,6 +134,7 @@ export const OutfitRecommendationSchema = z.object({
   }),
   expiresAt:  z.date(),
   createdAt:  z.date(),
+  updatedAt:  z.date(),
 })
 
 export const AICacheEntrySchema = z.object({
@@ -192,6 +193,14 @@ export const CreateWardrobeItemRequestSchema = z.object({
   imageUrl: z.string().url(),
   color:    z.string().max(50).optional(),
   brand:    z.string().max(50).optional(),
+})
+
+export const UploadSignatureResponseSchema = z.object({
+  signature: z.string(),
+  timestamp: z.number(),
+  apiKey:    z.string(),
+  cloudName: z.string(),
+  folder:    z.string(),
 })
 
 export const PaginationSchema = z.object({

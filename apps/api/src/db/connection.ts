@@ -71,6 +71,10 @@ async function ensureIndexes(): Promise<void> {
     // Feedback
     { collection: 'feedback', keys: { userId: 1, recommendationId: 1 } },
     { collection: 'feedback', keys: { userId: 1, createdAt: -1 } },
+
+    // Wardrobe — prevent collection scans on every wardrobe fetch
+    { collection: 'wardrobe', keys: { userId: 1 } },
+    { collection: 'wardrobe', keys: { userId: 1, category: 1 } },
   ]
 
   await Promise.allSettled(

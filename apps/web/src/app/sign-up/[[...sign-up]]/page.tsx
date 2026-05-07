@@ -1,62 +1,39 @@
+import Image from 'next/image'
+import Link from 'next/link'
 import { SignUp } from '@clerk/nextjs'
 
-export default function SignUpPage(): JSX.Element {
+export default function SignUpPage() {
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 relative z-10 w-full">
-      <div className="w-full max-w-md">
-        {/* Brand header */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center gap-2 mb-2">
-            <span className="text-[32px] font-bold tracking-tight text-white drop-shadow-[0_0_12px_rgba(248,50,134,0.5)]">
-              Atelier
-            </span>
+    <div className="min-h-screen bg-[#F8F8F7] flex">
+      <div className="hidden lg:flex lg:w-1/2 relative bg-ink-900 overflow-hidden">
+        <Image src="https://images.unsplash.com/photo-1490481651871-ab68de25d43d?q=80&w=1200&auto=format&fit=crop" alt="AI Fashion Stylist - editorial fashion" fill className="absolute inset-0 w-full h-full object-cover opacity-70" />
+        <div className="absolute inset-0 bg-gradient-to-br from-ink-900/60 to-ink-900/20" />
+        <div className="relative z-10 p-14 flex flex-col justify-between h-full">
+          <Link href="/" className="font-display text-2xl font-black text-white tracking-tighter">Atelier</Link>
+          <div>
+            <h2 className="font-display text-[42px] font-bold text-white leading-tight mb-4">Start Your<br /><em className="font-normal">AI Styling</em><br />Journey.</h2>
+            <p className="text-white/60 text-[15px] leading-relaxed max-w-sm">Join thousands discovering their perfect style with AI-powered outfit curation tailored to them.</p>
           </div>
-          <p className="text-[15px] text-ink-200 font-medium tracking-wide">
-            Your personal AI stylist
-          </p>
         </div>
-
-        <SignUp
-          appearance={{
-            variables: {
-              colorPrimary:    '#F83286',
-              colorBackground: 'rgba(255,255,255,0.05)',
-              colorText:       '#FFFFFF',
-              colorTextSecondary: '#A465E1',
-              colorInputBackground: 'rgba(0,0,0,0.3)',
-              colorInputText:  '#FFFFFF',
-              borderRadius:    '20px',
-            },
-            elements: {
-              formButtonPrimary:
-                'bg-brand hover:bg-brand-light text-[15px] font-bold transition-all shadow-[0_0_16px_rgba(248,50,134,0.4)]',
-              card:
-                'shadow-[0_16px_48px_rgba(0,0,0,0.5)] border border-white/10 rounded-[32px] backdrop-blur-3xl bg-ink-900/40',
-              headerTitle:
-                'font-bold text-white text-2xl tracking-tight',
-              headerSubtitle:
-                'text-ink-300 text-[14px]',
-              socialButtonsBlockButton:
-                'border border-white/10 text-[14px] font-bold text-white hover:bg-white/10 transition-colors backdrop-blur-md',
-              formFieldInput:
-                'text-[15px] border border-white/10 focus:ring-2 focus:ring-brand focus:border-brand rounded-[14px] transition-all bg-ink-900/50 text-white placeholder-ink-400',
-              formFieldLabel:
-                'text-ink-200 font-semibold',
-              dividerLine:
-                'bg-white/10',
-              dividerText:
-                'text-ink-400',
-              footerActionLink:
-                'text-brand hover:text-brand-light font-bold transition-colors text-[14px]',
-              footerActionText:
-                'text-ink-300',
-              identityPreviewText:
-                'text-white font-medium',
-              identityPreviewEditButtonIcon:
-                'text-brand hover:text-brand-light',
-            },
-          }}
-        />
+      </div>
+      <div className="flex-1 flex flex-col items-center justify-center p-8">
+        <div className="w-full max-w-[400px]">
+          <div className="mb-8 lg:hidden">
+            <Link href="/" className="font-display text-2xl font-black text-ink-900 tracking-tighter">Atelier</Link>
+          </div>
+          <div className="mb-6">
+            <h1 className="font-display text-[28px] font-bold mb-1">Create account</h1>
+            <p className="text-[14px] text-ink-400">Join Atelier — your AI fashion stylist</p>
+          </div>
+          <SignUp appearance={{ elements: {
+            rootBox: 'w-full',
+            card: 'w-full shadow-none border border-ink-200 rounded p-6 bg-white',
+            headerTitle: 'hidden', headerSubtitle: 'hidden',
+            formButtonPrimary: 'btn-brand w-full justify-center normal-case text-[13px] tracking-normal',
+            formFieldInput: 'input-field',
+            footerAction: 'text-[13px] text-ink-400',
+          }}} />
+        </div>
       </div>
     </div>
   )

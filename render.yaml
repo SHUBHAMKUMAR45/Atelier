@@ -1,3 +1,6 @@
+# DEPRECATED: This project now deploys to Railway. See railway.json.
+# This file is kept for reference only.
+
 services:
   - type: web
     name: ai-fashion-api

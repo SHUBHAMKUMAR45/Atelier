@@ -84,64 +84,53 @@ describe('sanitizeForAIPrompt — AI safety', () => {
   })
 })
 
-describe('RFC 7807 problemDetails', () => {
-  let problemDetails: (status: number, detail: string, traceId: string, extra?: any) => any
+describe('Response Helpers', () => {
+  let problemDetails: any
+  let successResponse: any
+  let paginatedResponse: any
 
   beforeAll(async () => {
     const mod = await import('../../src/middleware/index')
     problemDetails = mod.problemDetails
+    successResponse = mod.successResponse
+    paginatedResponse = mod.paginatedResponse
   })
 
-  it('returns correctly structured data', () => {
+  it('problemDetails should return correctly structured error data', () => {
     const pd = problemDetails(400, 'Bad request', 'trace-123')
-    expect(pd.type).toContain('bad-request')
-    expect(pd.status).toBe(400)
+    expect(pd.success).toBe(false)
+    expect(pd.data).toBeNull()
+    expect(pd.error).toBe('Bad request')
     expect(pd.traceId).toBe('trace-123')
   })
-})
 
-describe('Offline sync manager', () => {
-  it('generates unique operation IDs', () => {
-    const ids = Array.from({ length: 100 }, (_, i) =>
-      `${Date.now() + i}_${Math.random().toString(36).slice(2, 9)}`,
-    )
-    const unique = new Set(ids)
-    expect(unique.size).toBe(100)
+  it('successResponse should return correctly structured data', () => {
+    const res = successResponse({ ok: true }, 'trace-456')
+    expect(res.success).toBe(true)
+    expect(res.data).toEqual({ ok: true })
+    expect(res.error).toBeNull()
+    expect(res.traceId).toBe('trace-456')
   })
 
-  it('caps pending operation retries at maxRetries', () => {
-    const op = { retries: 3, maxRetries: 3 }
-    const shouldDiscard = op.retries >= op.maxRetries
-    expect(shouldDiscard).toBe(true)
-  })
-
-  it('keeps operations under maxRetries in queue', () => {
-    const op = { retries: 1, maxRetries: 3 }
-    const shouldKeep = op.retries < op.maxRetries
-    expect(shouldKeep).toBe(true)
-  })
-})
-
-describe('paginatedResponse meta', () => {
-  it('calculates pages correctly', async () => {
-    const { paginatedResponse } = await import('../../src/middleware/index')
-    const resp = paginatedResponse([1, 2, 3], 25, 2, 10, 'trace-1')
-    expect(resp.meta.pages).toBe(3)
-    expect(resp.meta.total).toBe(25)
-    expect(resp.meta.page).toBe(2)
+  it('paginatedResponse should calculate pages and meta correctly', () => {
+    const items = [1, 2, 3]
+    const resp = paginatedResponse(items, 25, 2, 10, 'trace-789')
+    
     expect(resp.success).toBe(true)
-    expect(resp.traceId).toBe('trace-1')
+    expect(resp.data.items).toEqual(items)
+    expect(resp.traceId).toBe('trace-789')
+    expect(resp.data.pages).toBe(3)
+    expect(resp.data.total).toBe(25)
+    expect(resp.data.page).toBe(2)
   })
 
-  it('handles exact division', async () => {
-    const { paginatedResponse } = await import('../../src/middleware/index')
+  it('paginatedResponse handles exact division', () => {
     const resp = paginatedResponse([], 20, 1, 10, 't')
-    expect(resp.meta.pages).toBe(2)
+    expect(resp.data.pages).toBe(2)
   })
 
-  it('handles zero total', async () => {
-    const { paginatedResponse } = await import('../../src/middleware/index')
+  it('paginatedResponse handles zero total', () => {
     const resp = paginatedResponse([], 0, 1, 10, 't')
-    expect(resp.meta.pages).toBe(0)
+    expect(resp.data.pages).toBe(0)
   })
 })

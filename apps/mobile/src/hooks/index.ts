@@ -24,11 +24,9 @@ export function useProfile() {
     setLoading(true)
     setError(null)
     try {
-      const token = await getToken()
-      if (!token) throw new Error('Not authenticated')
       const [p, q] = await Promise.all([
-        mobileApi.profile.get(token),
-        mobileApi.profile.getQuota(token),
+        mobileApi.profile.get(),
+        mobileApi.profile.getQuota(),
       ])
       setProfile(p)
       setQuota(q)
@@ -57,10 +55,13 @@ export function useRecommend() {
     setCurrent, setGenerating, setStep, setError, reset,
   } = useRecommendStore()
 
+  const [isSlowGeneration, setIsSlowGeneration] = useState(false)
+
   const generate = useCallback(async (request: RecommendRequest): Promise<OutfitRecommendation | null> => {
     reset()
     setGenerating(true)
     setStep('analyzing')
+    setIsSlowGeneration(false)
 
     let stepIdx = 0
     const stepTimer = setInterval(() => {
@@ -69,27 +70,31 @@ export function useRecommend() {
       if (next) setStep(next)
     }, 3_000)
 
-    try {
-      const token = await getToken()
-      if (!token) throw new Error('Authentication required')
+    // Show "taking longer than usual" after 7s
+    const slowTimer = setTimeout(() => setIsSlowGeneration(true), 7_000)
 
+    try {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
 
-      const result = await mobileApi.recommend.generate(token, request)
+      const result = await mobileApi.recommend.generate(request)
 
+      clearTimeout(slowTimer)
       clearInterval(stepTimer)
+      setIsSlowGeneration(false)
       setStep('done')
       setCurrent(result)
 
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
 
       // Refresh quota
-      const quota = await mobileApi.profile.getQuota(token).catch(() => null)
+      const quota = await mobileApi.profile.getQuota().catch(() => null)
       if (quota) setQuota(quota)
 
       return result
     } catch (err) {
+      clearTimeout(slowTimer)
       clearInterval(stepTimer)
+      setIsSlowGeneration(false)
       setStep('error')
       const msg = err instanceof APIError ? err.message : 'Generation failed'
       setError(msg)
@@ -100,7 +105,7 @@ export function useRecommend() {
     }
   }, [getToken, setCurrent, setError, setGenerating, setQuota, setStep, reset])
 
-  return { generate }
+  return { generate, isSlowGeneration }
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -121,9 +126,7 @@ export function useHistory() {
     else        setLoading(true)
 
     try {
-      const token = await getToken()
-      if (!token) return
-      const result = await mobileApi.recommend.getHistory(token, pageNum, 10)
+      const result = await mobileApi.recommend.getHistory(pageNum, 10)
       setItems(prev => append ? [...prev, ...result.items] : result.items)
       setTotalPages(result.pages)
       setPage(pageNum)
@@ -155,9 +158,7 @@ export function useFeedback() {
 
   const submit = useCallback(async (id: string, rating: 'like' | 'dislike') => {
     try {
-      const token = await getToken()
-      if (!token) return
-      await mobileApi.feedback.submit(token, id, rating)
+      await mobileApi.feedback.submit(id, { rating })
       await Haptics.impactAsync(
         rating === 'like'
           ? Haptics.ImpactFeedbackStyle.Light
@@ -166,7 +167,7 @@ export function useFeedback() {
     } catch {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
     }
-  }, [getToken])
+  }, [])
 
   return { submit }
 }
@@ -183,10 +184,7 @@ export function useTrends(location?: string) {
   useEffect(() => {
     let cancelled = false
     setLoading(true)
-    getToken().then(token => {
-      if (!token || cancelled) return
-      return mobileApi.trends.get(token, location)
-    }).then(result => {
+    mobileApi.trends.get(location).then(result => {
       if (!cancelled && result) setData(result)
     }).catch(() => {/* non-fatal */}).finally(() => {
       if (!cancelled) setLoading(false)
@@ -211,9 +209,7 @@ export function useWardrobe() {
     setLoading(true)
     setError(null)
     try {
-      const token = await getToken()
-      if (!token) return
-      const result = await mobileApi.wardrobe.get(token)
+      const result = await mobileApi.wardrobe.get()
       setItems(result)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load wardrobe')
@@ -226,9 +222,7 @@ export function useWardrobe() {
 
   const addItem = async (data: CreateWardrobeItemRequest) => {
     try {
-      const token = await getToken()
-      if (!token) return
-      const newItem = await mobileApi.wardrobe.add(token, data)
+      const newItem = await mobileApi.wardrobe.add(data)
       setItems(prev => [newItem, ...prev])
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
       return newItem
@@ -240,9 +234,7 @@ export function useWardrobe() {
 
   const deleteItem = async (id: string) => {
     try {
-      const token = await getToken()
-      if (!token) return
-      await mobileApi.wardrobe.delete(token, id)
+      await mobileApi.wardrobe.delete(id)
       setItems(prev => prev.filter(i => i._id !== id))
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
     } catch (err) {

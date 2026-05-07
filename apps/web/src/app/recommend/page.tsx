@@ -1,271 +1,193 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import {
-  Sparkles, Loader2, AlertCircle, RefreshCw,
-  ChevronRight, CloudSun, Info, Shirt,
-} from 'lucide-react'
-import { clsx }            from 'clsx'
-import { useRecommend, useWeather, useHistory }    from '../../hooks'
+import { Sparkles, Shirt } from 'lucide-react'
+import { Button } from '../../components/ui/Button'
+import { useRecommend, useWeather } from '../../hooks'
 import { useRecommendStore } from '../../store'
-import { OutfitDetail }      from '../../components/outfit/OutfitDetail'
-import { OutfitCard }        from '../../components/outfit/OutfitCard'
-import { AppLayout }         from '../../components/layout/AppLayout'
-import {
-  OccasionEnum,
-} from '../../../../../packages/shared/src/schemas'
-import type { z }            from 'zod'
-
-const _OCCASION_OPTIONS = OccasionEnum.options
+import { OutfitDetail } from '../../components/outfit/OutfitDetail'
+import { AppLayout } from '../../components/layout/AppLayout'
+import type { OccasionEnum } from '../../../../../packages/shared/src/schemas'
+import type { z } from 'zod'
+import { cn } from '../../lib/utils'
 
 type Occasion = z.infer<typeof OccasionEnum>
 
-const OCCASIONS: Array<{ value: Occasion; label: string; icon: string; desc: string }> = [
-  { value: 'casual',  label: 'Casual',  icon: '☕', desc: 'Everyday comfort' },
-  { value: 'work',    label: 'Work',    icon: '💼', desc: 'Professional & polished' },
-  { value: 'date',    label: 'Date',    icon: '🌹', desc: 'Romantic & elevated' },
-  { value: 'party',   label: 'Party',   icon: '✨', desc: 'Bold & festive' },
-  { value: 'outdoor', label: 'Outdoor', icon: '🌿', desc: 'Active & practical' },
-  { value: 'gym',     label: 'Gym',     icon: '⚡', desc: 'Performance first' },
-  { value: 'travel',  label: 'Travel',  icon: '✈️', desc: 'Versatile & easy' },
-  { value: 'wedding', label: 'Wedding', icon: '🤍', desc: 'Elegant & respectful' },
+const OCCASIONS: Array<{ value: Occasion; label: string; emoji: string; desc: string }> = [
+  { value: 'casual',  label: 'Casual',  emoji: '☕', desc: 'Daily comfort' },
+  { value: 'work',    label: 'Work',    emoji: '💼', desc: 'Office ready' },
+  { value: 'date',    label: 'Date',    emoji: '🌹', desc: 'Evening look' },
+  { value: 'party',   label: 'Party',   emoji: '✨', desc: 'Celebration' },
+  { value: 'outdoor', label: 'Outdoor', emoji: '🌿', desc: 'Adventure' },
+  { value: 'gym',     label: 'Gym',     emoji: '⚡', desc: 'Performance' },
+  { value: 'travel',  label: 'Travel',  emoji: '✈️', desc: 'Jetsetter' },
+  { value: 'wedding', label: 'Wedding', emoji: '🤍', desc: 'Formal' },
 ]
 
-const STEP_LABELS: Record<string, string> = {
-  analyzing:   'Analyzing your style profile…',
-  styling:     'Curating the perfect outfit…',
-  finalizing:  'Adding the finishing touches…',
-  done:        'Your look is ready',
-  error:       'Something went wrong',
-}
+export default function RecommendPage(): React.JSX.Element {
+  const { generate, isSlow } = useRecommend()
+  const { current, isGenerating, generationStep, error: genError, reset: resetGen } = useRecommendStore()
+  const [rateLimitCooldown, setRateLimitCooldown] = useState(0)
 
-const STEP_ORDER = ['analyzing', 'styling', 'finalizing']
-
-export default function RecommendPage() : JSX.Element {
-  const { generate }          = useRecommend()
-  const { current, isGenerating, generationStep, error } = useRecommendStore()
-  const { data: weather }              = useWeather()
-  const { data: history }              = useHistory(1)
-  const [occasion, setOccasion]        = useState<Occasion | null>(null)
+  // Rate limit cooldown timer — disable retry for 60s on 429
+  useEffect(() => {
+    if (genError?.includes('limit') || genError?.includes('429')) {
+      setRateLimitCooldown(60)
+      const tick = setInterval(() => {
+        setRateLimitCooldown(prev => {
+          if (prev <= 1) { clearInterval(tick); return 0 }
+          return prev - 1
+        })
+      }, 1000)
+      return () => clearInterval(tick)
+    }
+    return undefined
+  }, [genError])
+  const { data: weather } = useWeather()
+  const [occasion, setOccasion] = useState<Occasion | null>(null)
   const [description, setDescription] = useState('')
-  const [useWardrobe, setUseWardrobe]  = useState(true)
-  const [showDetail, setShowDetail]    = useState(false)
-
-
-  const lastOutfit = history?.items[0] ?? null
+  const [showDetail, setShowDetail] = useState(false)
 
   async function handleGenerate() {
     if (!occasion) return
-    try {
-      await generate({
-        occasion,
-        description: description || undefined,
-        useWardrobe,
-      })
-      setShowDetail(true)
-    } catch { /* shown via toast */ }
+    try { await generate({ occasion, description: description || undefined, useWardrobe: true }); setShowDetail(true) }
+    catch { /* toast handled */ }
   }
 
-  const stepIdx = STEP_ORDER.indexOf  return (
+  return (
     <AppLayout>
-      <motion.div initial={{ opacity:0, y:12 }} animate={{ opacity:1, y:0 }} className="max-w-3xl mx-auto py-8">
-
-        {/* ── Header ─────────────────────────────────────────── */}
-        <div className="mb-12 text-center">
-          <p className="text-[13px] font-bold text-brand uppercase tracking-widest mb-4">AI Styling Session</p>
-          <h1 className="text-4xl md:text-6xl font-black tracking-tighter text-ink-primary leading-tight mb-8">
-            What's the occasion?
-          </h1>
-          {weather && (
-            <div className="inline-flex items-center gap-2 mt-4 bg-secondary border border-ink-border rounded-lg px-4 py-2">
-              <CloudSun size={14} className="text-ink-secondary" />
-              <span className="text-[13px] font-bold text-ink-primary">
-                {Math.round(weather.temp)}°C · {weather.condition} factored in
-              </span>
-            </div>
-          )}
+      <div className="bg-[#F8F8F7] min-h-screen">
+        {/* Header */}
+        <div className="bg-white border-b border-ink-200 px-4 sm:px-6 md:px-8 py-5 md:py-7">
+          <div className="max-w-[760px] mx-auto">
+            <p className="label-caps mb-1">Personal Stylist</p>
+            <h1 className="font-display text-[clamp(24px,3vw,36px)] font-bold">What's the occasion?</h1>
+          </div>
         </div>
 
-        {/* ── Generating state ───────────────────────────────── */}
-        <AnimatePresence mode="wait">
-          {isGenerating && (
-            <motion.div key="generating"
-              initial={{ opacity:0 }}
-              animate={{ opacity:1 }}
-              exit={{ opacity:0 }}
-              className="rounded-[24px] border border-ink-border bg-white overflow-hidden mb-12 shadow-md">
-
-              {/* Progress steps */}
-              <div className="px-10 pt-12 pb-10">
-                <div className="flex items-center justify-between mb-12 relative">
-                  <div className="absolute top-4 left-0 right-0 h-[2px] bg-secondary z-0" />
-                  {STEP_ORDER.map((step, i) => (
-                    <div key={step} className="relative z-10 flex flex-col items-center gap-3">
-                      <div className={clsx(
-                        "w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all duration-500 bg-white",
-                        i < stepIdx ? 'bg-brand border-brand' :
-                        i === stepIdx ? 'border-brand' :
-                        'border-ink-border'
-                      )}>
-                        {i < stepIdx ? (
-                          <svg width="14" height="14" viewBox="0 0 12 12" fill="none">
-                            <path d="M2.5 6L5 8.5L9.5 4" stroke="#fff" strokeWidth="2.5" strokeLinecap="round"/>
-                          </svg>
-                        ) : i === stepIdx ? (
-                          <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1.2, ease: 'linear' }}>
-                            <Loader2 size={16} strokeWidth={2.5} className="text-brand" />
-                          </motion.div>
-                        ) : (
-                          <div className="w-2 h-2 rounded-full bg-secondary" />
-                        )}
-                      </div>
-                      <span className={clsx(
-                        "text-[12px] font-black uppercase tracking-widest",
-                        i <= stepIdx ? 'text-brand' : 'text-ink-secondary'
-                      )}>
-                        {step}
-                      </span>
-                    </div>
-                  ))}
+        <div className="max-w-[760px] mx-auto px-4 sm:px-6 md:px-8 py-6 md:py-10">
+          <AnimatePresence mode="wait">
+            {genError ? (
+              <motion.div
+                key="gen-error"
+                initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }} exit={{ opacity:0 }}
+                className="flex flex-col items-center gap-5 text-center py-20"
+              >
+                <div className={`w-16 h-16 rounded border flex items-center justify-center text-2xl font-bold ${rateLimitCooldown > 0 ? 'border-amber-200 bg-amber-50 text-amber-400' : 'border-red-200 bg-red-50 text-red-400'}`}>
+                  {rateLimitCooldown > 0 ? '⏳' : '!'}
                 </div>
+                <div className="space-y-2">
+                  <p className="text-[17px] font-bold text-ink-900">
+                    {rateLimitCooldown > 0 ? 'Daily limit reached' : 'Something went wrong'}
+                  </p>
+                  <p className="text-[14px] text-ink-500 max-w-sm leading-relaxed">{genError}</p>
+                  {rateLimitCooldown > 0 && (
+                    <p className="text-[13px] font-semibold text-amber-600">
+                      You can retry in {rateLimitCooldown}s
+                    </p>
+                  )}
+                </div>
+                <div className="flex gap-3">
+                  <Button
+                    variant="outline"
+                    onClick={resetGen}
+                    disabled={rateLimitCooldown > 0}
+                    className={rateLimitCooldown > 0 ? 'opacity-40 cursor-not-allowed' : ''}
+                  >
+                    {rateLimitCooldown > 0 ? `Wait ${rateLimitCooldown}s` : 'Start Over'}
+                  </Button>
+                </div>
+              </motion.div>
+            ) : !isGenerating && !current ? (
+              <motion.div key="form" initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }} exit={{ opacity:0, y:-8 }} className="space-y-10">
+                <p className="text-[14px] text-ink-500 -mt-2">Select your destination and our AI will curate an aesthetic that fits you perfectly.</p>
 
-                {/* Skeleton content */}
-                <div className="space-y-6">
-                  <div className="skeleton h-64 w-full rounded-[24px] bg-secondary" />
-                  <div className="space-y-2">
-                    <div className="skeleton h-4 w-3/4 rounded-md bg-secondary" />
-                    <div className="skeleton h-4 w-1/2 rounded-md bg-secondary" />
+                {/* Occasion grid — 4 col, clean */}
+                <div>
+                  <p className="label-caps mb-4">Select Occasion</p>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {OCCASIONS.map(occ => (
+                      <button
+                        key={occ.value}
+                        onClick={() => setOccasion(occ.value)}
+                        className={cn(
+                          'flex flex-col items-center gap-2 py-6 px-3 rounded border-2 transition-all duration-200 text-center',
+                          occasion === occ.value
+                            ? 'bg-brand border-brand text-white shadow-[0_4px_16px_-2px_rgba(46,91,142,0.3)]'
+                            : 'bg-white border-ink-200 hover:border-brand/40 hover:bg-brand/5'
+                        )}>
+                        <span className={cn('text-2xl transition-all', occasion === occ.value ? 'scale-110' : 'grayscale opacity-70')}>{occ.emoji}</span>
+                        <span className="text-[13px] font-semibold">{occ.label}</span>
+                        <span className={cn('text-[11px]', occasion === occ.value ? 'text-white/70' : 'text-ink-400')}>{occ.desc}</span>
+                      </button>
+                    ))}
                   </div>
                 </div>
-              </div>
 
-              <div className="border-t border-ink-border px-10 py-6 bg-secondary/50">
-                <p className="text-[14px] font-bold text-ink-primary text-center animate-pulse">
-                  {STEP_LABELS[generationStep] ?? 'Working on your look…'}
-                </p>
-              </div>
-            </motion.div>
-          )}
-
-          {/* ── Error state ─────────────────────────── */}
-          {!isGenerating && generationStep === 'error' && (
-            <motion.div key="error"
-              initial={{ opacity:0 }}
-              animate={{ opacity:1 }}
-              className="rounded-[32px] border border-red-100 bg-red-50 p-10 mb-12 text-center">
-              <AlertCircle size={40} className="mx-auto mb-6 text-red-500" />
-              <h3 className="text-2xl font-black text-ink-primary mb-3">AI is taking a breather</h3>
-              <p className="text-red-700 font-medium mb-8 max-w-md mx-auto">{error}</p>
-              <button onClick={handleGenerate} disabled={!occasion}
-                className="w-full sm:w-auto px-10 py-4 bg-brand text-white font-black rounded-full shadow-lg shadow-brand/20">
-                Try Again
-              </button>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* ── Picker ────────────────────────────────── */}
-        {!isGenerating && (
-          <motion.div key="picker" initial={{ opacity:0 }} animate={{ opacity:1 }}>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-10">
-              {OCCASIONS.map((occ, i) => (
-                <motion.button
-                  key={occ.value}
-                  initial={{ opacity:0, y:8 }}
-                  animate={{ opacity:1, y:0 }}
-                  transition={{ delay: i * 0.04 }}
-                  onClick={() => setOccasion(occasion === occ.value ? null : occ.value)}
-                  className={clsx(
-                    "flex flex-col items-center justify-center gap-3 p-6 rounded-[24px] text-center transition-all duration-200 border shadow-sm",
-                    occasion === occ.value
-                      ? 'bg-brand text-white border-brand shadow-md scale-[1.02]'
-                      : 'bg-white border-ink-border hover:bg-secondary hover:scale-[1.01]'
-                  )}>
-                  <span className="text-3xl mb-1 grayscale-[0.5] group-hover:grayscale-0">{occ.icon}</span>
-                  <span className="text-[15px] font-black tracking-tight leading-none uppercase">
-                    {occ.label}
-                  </span>
-                  <span className={clsx(
-                    "text-[11px] font-bold leading-snug",
-                    occasion === occ.value ? 'text-white/80' : 'text-ink-secondary'
-                  )}>
-                    {occ.desc}
-                  </span>
-                </motion.button>
-              ))}
-            </div>
-            
-            {/* Virtual Stylist Toggle */}
-            <div className="mb-6">
-              <button 
-                onClick={() => setUseWardrobe(!useWardrobe)}
-                className={clsx(
-                  "w-full flex items-center justify-between p-6 rounded-[24px] border transition-all duration-300",
-                  useWardrobe 
-                    ? "bg-brand/5 border-brand/20 shadow-sm" 
-                    : "bg-white border-ink-border hover:bg-secondary"
-                )}>
-                <div className="flex items-center gap-4">
-                  <div className={clsx(
-                    "w-12 h-12 rounded-2xl flex items-center justify-center transition-colors",
-                    useWardrobe ? "bg-brand text-white" : "bg-secondary text-ink-secondary"
-                  )}>
-                    <Shirt size={22} />
-                  </div>
-                  <div className="text-left">
-                    <p className="text-[15px] font-black text-ink-primary leading-tight">Virtual Stylist</p>
-                    <p className="text-[13px] font-bold text-ink-secondary">Use my existing wardrobe items</p>
-                  </div>
-                </div>
-                <div className={clsx(
-                  "w-12 h-6 rounded-full relative transition-colors duration-300",
-                  useWardrobe ? "bg-brand" : "bg-ink-border"
-                )}>
-                  <motion.div 
-                    animate={{ x: useWardrobe ? 24 : 4 }}
-                    className="absolute top-1 left-0 w-4 h-4 rounded-full bg-white shadow-sm"
+                {/* Description */}
+                <div>
+                  <label className="label-caps mb-3 block">Context (Optional)</label>
+                  <textarea
+                    className="w-full bg-white border border-ink-200 rounded px-4 py-4 text-[14px] text-ink-900 placeholder:text-ink-400 focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/10 transition-all resize-none min-h-[120px] leading-relaxed"
+                    placeholder="e.g. 'Coffee date in Le Marais' or 'Rooftop party during sunset'..."
+                    value={description}
+                    onChange={e => setDescription(e.target.value)}
                   />
                 </div>
-              </button>
-            </div>
 
-            {/* Description input */}
-            <div className="mb-10">
-              <textarea
-                value={description}
-                onChange={e => setDescription(e.target.value)}
-                placeholder="Optional context: 'rooftop evening', 'business travel'..."
-                rows={3}
-                className="w-full bg-white border border-ink-border rounded-[24px] px-6 py-5
-                           text-[16px] text-ink-primary placeholder:text-ink-secondary shadow-sm
-                           focus:outline-none focus:border-brand focus:ring-1 focus:ring-brand transition-all resize-none font-medium"
-              />
-            </div>
+                {/* CTA */}
+                <div className="space-y-4">
+                  <Button variant="brand" className="w-full h-12 text-[14px]" disabled={!occasion} onClick={handleGenerate}>
+                    <Sparkles size={16} className="fill-white" />
+                    {occasion ? 'Generate Outfit' : 'Select an Occasion'}
+                  </Button>
+                  {weather && (
+                    <div className="flex justify-center">
+                      <div className="inline-flex items-center gap-2 px-4 py-2 bg-white rounded border border-ink-200 text-[12px] text-ink-500 font-medium">
+                        <Shirt size={12} className="text-brand" />
+                        Optimised for {Math.round(weather.temp)}°C · {weather.condition}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            ) : isGenerating ? (
+              <motion.div key="generating" initial={{ opacity:0, scale:0.98 }} animate={{ opacity:1, scale:1 }} exit={{ opacity:0 }}
+                className="min-h-[60vh] flex flex-col items-center justify-center gap-10 text-center py-20">
+                <div className="relative">
+                  <div className="w-24 h-24 rounded border-2 border-brand/20 flex items-center justify-center">
+                    <Sparkles size={36} className="text-brand fill-brand animate-pulse" />
+                  </div>
+                  <motion.div animate={{ rotate:360 }} transition={{ duration:8, repeat:Infinity, ease:'linear' }}
+                    className="absolute -inset-5 border border-dashed border-brand/20 rounded" />
+                </div>
+                <div className="space-y-3">
+                  <h2 className="font-display text-[28px] font-bold">
+                    {generationStep === 'styling' ? 'Curating Style...' : 'Analysing Aesthetic...'}
+                  </h2>
+                  <p className="text-[14px] text-ink-500 max-w-xs mx-auto">Mapping colours, cuts and contexts to your perfect look.</p>
+                {isSlow && (
+                  <p className="text-[12px] text-amber-500 font-semibold animate-pulse">
+                    Taking longer than usual — hang tight…
+                  </p>
+                )}
+                </div>
+                <div className="w-64 h-0.5 bg-ink-100 rounded-full overflow-hidden relative">
+                  <motion.div initial={{ left:'-100%' }} animate={{ left:'100%' }} transition={{ duration:1.5, repeat:Infinity, ease:'easeInOut' }}
+                    className="absolute top-0 bottom-0 w-1/2 bg-brand rounded-full" />
+                </div>
+              </motion.div>
+            ) : null}
 
-            {/* Final CTA */}
-            <button
-              onClick={handleGenerate}
-              disabled={!occasion}
-              className="w-full py-6 text-xl font-black tracking-tight text-white rounded-[24px] 
-                         flex items-center justify-center gap-3 transition-all duration-200
-                         disabled:opacity-20 disabled:cursor-not-allowed
-                         bg-brand shadow-lg shadow-brand/20 hover:shadow-xl hover:scale-[1.01] active:scale-[0.99] group">
-              <Sparkles size={24} strokeWidth={2.5} className="group-hover:rotate-12 transition-transform" />
-              {occasion
-                ? `Generate ${OCCASIONS.find(o => o.value === occasion)?.label} Look`
-                : 'Select an occasion'}
-            </button>
-          </motion.div>
-        )}
-      </motion.div>
 
-      {/* ── Result Modal ───────────────────────────────────────── */}
-      <AnimatePresence>
-        {showDetail && current && (
-          <OutfitDetail recommendation={current} onClose={() => setShowDetail(false)} />
-        )}
-      </AnimatePresence>
+          </AnimatePresence>
+
+          <AnimatePresence>
+            {showDetail && current && <OutfitDetail recommendation={current} onClose={() => setShowDetail(false)} />}
+          </AnimatePresence>
+        </div>
+      </div>
     </AppLayout>
   )
 }

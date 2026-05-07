@@ -1,43 +1,41 @@
 # Dependencies
-node_modules
-.pnpm-store
+node_modules/
+.pnpm-store/
 
 # Build outputs
-dist
-.next
-out
-build
-.expo
-*.tsbuildinfo
+dist/
+.next/
+out/
 
-# Environment
+# Environment files (NEVER commit these)
 .env
 .env.local
-.env.production
-.env.test
+.env.*.local
+!.env.example
 
-# Turbo cache
-.turbo
-
-# Editor
-.vscode
-.idea
-*.swp
-*.swo
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
 
 # OS
 .DS_Store
 Thumbs.db
 
-# Logs
-*.log
-logs/
+# IDE
+.vscode/
+.idea/
+*.swp
 
-# Coverage
-coverage
+# Expo
+.expo/
+apps/mobile/.expo/
 
-# Vercel
-.vercel
+# Turbo cache
+.turbo/
 
-# Docker
-docker-compose.override.yml
+# Test coverage
+coverage/
+
+# MongoDB memory server cache
+.cache/mongodb-binaries/

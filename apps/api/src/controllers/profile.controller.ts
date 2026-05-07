@@ -6,11 +6,10 @@ export async function getProfile(req: Request, res: Response, next: NextFunction
   try {
     const profile = await profileService.getProfile(req.userId)
     if (!profile) {
-      res.status(404).setHeader('Content-Type', 'application/problem+json')
-        .json(problemDetails(404, 'Profile not found', req.traceId))
+      res.status(404).json(problemDetails(404, 'Profile not found', req.traceId ?? ""))
       return
     }
-    res.json(successResponse(profile, req.traceId))
+    res.json(successResponse(profile, req.traceId ?? ""))
   } catch (err) { next(err) }
 }
 
@@ -18,49 +17,34 @@ export async function getMe(req: Request, res: Response, next: NextFunction): Pr
   try {
     const profile = await profileService.getProfile(req.userId)
     // If Lazy Sync worked, this should ALWAYS exist. 
-    // If it doesn't, we return a 200 with guest info or 404.
-    res.json(successResponse(profile || { clerkUserId: req.userId, guest: true }, req.traceId))
+    res.json(successResponse(profile || { clerkUserId: req.userId, guest: true }, req.traceId ?? ""))
   } catch (err) { next(err) }
 }
 
 export async function setupProfile(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const profile = await profileService.upsertProfile(req.userId, req.body)
-    res.status(200).json(successResponse(profile, req.traceId))
+    res.json(successResponse(profile, req.traceId ?? ""))
   } catch (err) { next(err) }
 }
 
 export async function updateMeasurements(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     await profileService.updateMeasurements(req.userId, req.body)
-    res.json(successResponse({ updated: true }, req.traceId))
-  } catch (err) {
-    if (err instanceof Error && err.message === 'Profile not found') {
-      res.status(404).setHeader('Content-Type', 'application/problem+json')
-        .json(problemDetails(404, err.message, req.traceId))
-      return
-    }
-    next(err)
-  }
+    res.json(successResponse({ updated: true }, req.traceId ?? ""))
+  } catch (err) { next(err) }
 }
 
 export async function updatePreferences(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     await profileService.updatePreferences(req.userId, req.body)
-    res.json(successResponse({ updated: true }, req.traceId))
-  } catch (err) {
-    if (err instanceof Error && err.message === 'Profile not found') {
-      res.status(404).setHeader('Content-Type', 'application/problem+json')
-        .json(problemDetails(404, err.message, req.traceId))
-      return
-    }
-    next(err)
-  }
+    res.json(successResponse({ updated: true }, req.traceId ?? ""))
+  } catch (err) { next(err) }
 }
 
 export async function getQuota(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const quota = await profileService.getQuotaStatus(req.userId)
-    res.json(successResponse(quota, req.traceId))
+    res.json(successResponse(quota, req.traceId ?? ""))
   } catch (err) { next(err) }
 }

@@ -7,7 +7,7 @@ export const metadata = {
   title: 'Studio — Atelier',
 }
 
-export default async function DashboardPage(): Promise<JSX.Element> {
+export default async function DashboardPage(): Promise<React.JSX.Element> {
   const { userId } = await auth()
   if (!userId) redirect('/sign-in')
 

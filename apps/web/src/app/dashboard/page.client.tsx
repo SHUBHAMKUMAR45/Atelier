@@ -1,169 +1,157 @@
 'use client'
 
-import Link             from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useState }     from 'react'
-import {
-  Sparkles, ArrowRight, TrendingUp, ChevronRight,
-  CloudSun, Camera, Clock,
-} from 'lucide-react'
-import { useProfile, useQuota, useHistory, useTrends, useWeather } from '../../hooks'
+import { useState } from 'react'
+import Link from 'next/link'
+import Image from 'next/image'
+import { Sparkles, Bell, Search, ChevronRight, History, Shirt, TrendingUp, Plus, MapPin } from 'lucide-react'
+import { Button } from '../../components/ui/Button'
+import { Card } from '../../components/ui/Card'
+import { useProfile, useHistory } from '../../hooks'
 import { OutfitCard, OutfitCardSkeleton } from '../../components/outfit/OutfitCard'
-import { OutfitDetail }                   from '../../components/outfit/OutfitDetail'
-import type { OutfitRecommendation }       from '../../../../../packages/shared/src/schemas'
+import { OutfitDetail } from '../../components/outfit/OutfitDetail'
+import { ErrorState } from '../../components/ui/ErrorState'
+import type { OutfitRecommendation } from '../../../../../packages/shared/src/schemas'
 
-function getTimeOfDay() {
-  const h = new Date().getHours()
-  if (h < 12) return 'morning'
-  if (h < 17) return 'afternoon'
-  return 'evening'
-}
-
-export function DashboardClient() : JSX.Element {
-  const { profile, isLoading: profileLoading } = useProfile()
-  const { quota }                               = useQuota()
-  const { data: history, isLoading: histLoading } = useHistory(1)
-  const { data: trends }                         = useTrends()
-  const { data: weather }                        = useWeather()
+export function DashboardClient(): React.JSX.Element {
+  const { profile, error: profileError, refresh: refreshProfile } = useProfile()
+  const { data: history, isLoading: histLoading, error: histError, refresh: refreshHistory } = useHistory()
   const [selected, setSelected] = useState<OutfitRecommendation | null>(null)
 
-  const recent   = history?.items.slice(0, 3) ?? []
-  const firstName = profile?.displayName?.split(' ')[0] ?? 'Stylist'
-  const quotaPct  = quota ? Math.round((quota.used / quota.limit) * 100) : 0
+  const error = profileError || histError
+  const refresh = () => { refreshProfile(); refreshHistory() }
+
+  if (error) return <ErrorState message={error} onRetry={refresh} />
+
+  const recent = history?.items?.slice(0, 3) ?? []
+  const firstName = profile?.displayName?.split(' ')?.[0] ?? 'Stylist'
+  const h = new Date().getHours()
+  const greeting = h < 12 ? 'Good Morning' : h < 17 ? 'Good Afternoon' : 'Good Evening'
 
   return (
-    <>
-      {/* ── Header Welcome ─────────────────────────────────────── */}
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="mb-12"
-      >
-        <p className="text-[13px] font-bold text-ink-secondary mb-4 tracking-widest uppercase">
-          {new Date().toLocaleDateString('en', { weekday: 'long', month: 'long', day: 'numeric' })}
-        </p>
-
-        <h1 className="text-4xl md:text-6xl font-bold tracking-tighter text-ink-primary leading-[1.1] mb-8">
-          {profileLoading ? (
-            <span className="skeleton inline-block w-48 h-12 rounded-lg bg-secondary" />
-          ) : (
-            <>Good {getTimeOfDay()}, <span className="text-brand font-black">{firstName}</span></>
-          )}
-        </h1>
-
-        <div className="flex items-center gap-3">
-          {/* Weather chip */}
-          {weather ? (
-            <div className="flex items-center gap-2 bg-secondary border border-ink-border rounded-lg px-4 py-2">
-              <CloudSun size={14} className="text-ink-secondary" />
-              <span className="text-[13px] font-bold text-ink-primary">
-                {Math.round(weather.temp)}°C · {weather.condition}
-              </span>
+    <div className="bg-[#F8F8F7] min-h-screen">
+      {/* ── Page Header ─────────────────────────── */}
+      <div className="bg-white border-b border-ink-200 px-4 sm:px-6 md:px-8 py-6 md:py-8">
+        <div className="max-w-[1100px] mx-auto flex items-start justify-between gap-6">
+          <motion.div initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }} transition={{ duration:0.4 }}>
+            <p className="label-caps mb-2 flex items-center gap-1.5">
+              <MapPin size={10} className="text-brand" />
+              {profile?.location ? `${profile.location.city}, ${profile.location.country}` : 'Your Style Studio'}
+            </p>
+            <h1 className="font-display text-[clamp(28px,3.5vw,44px)] font-black leading-tight">
+              {greeting},<br />
+              <span className="text-brand italic font-normal">{firstName}</span>
+            </h1>
+          </motion.div>
+          <div className="flex items-center gap-3 mt-2">
+            <div className="relative hidden md:block">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
+              <input type="text" placeholder="Search outfits, styles..." className="input-field pl-9 h-9 w-52 text-[13px]" />
             </div>
-          ) : (
-            <div className="skeleton h-10 w-32 rounded-lg bg-secondary" />
-          )}
-
-          {/* Quota nudge */}
-          {quota && (
-            <div className="hidden sm:flex items-center gap-2 bg-white border border-ink-border rounded-lg px-4 py-2 shadow-sm">
-              <Sparkles size={14} className="text-brand" />
-              <span className="text-[13px] font-bold text-ink-primary">
-                {quota.remaining} style{quota.remaining !== 1 ? 's' : ''} left
-              </span>
-            </div>
-          )}
+            <Button variant="outline" size="icon">
+              <Bell size={16} />
+            </Button>
+            <Link href="/profile">
+              <div className="w-9 h-9 rounded bg-brand text-white flex items-center justify-center font-bold text-[14px]">
+                {(firstName[0] || 'A').toUpperCase()}
+              </div>
+            </Link>
+          </div>
         </div>
-      </motion.div>
-
-      {/* ── Quick Actions ─────────────────────────────────────── */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-16">
-        <Link href="/recommend"
-          className="group relative overflow-hidden rounded-[24px] p-8 border border-ink-border bg-white shadow-sm hover:shadow-md transition-all duration-300">
-          <div className="absolute top-0 right-0 p-6 opacity-[0.03] group-hover:opacity-[0.08] transition-opacity">
-            <Sparkles size={120} />
-          </div>
-          <div className="w-12 h-12 rounded-2xl bg-brand/10 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
-            <Sparkles size={20} className="text-brand" strokeWidth={2.5} />
-          </div>
-          <h3 className="text-2xl font-bold text-ink-primary mb-2">Get Styled</h3>
-          <p className="text-ink-secondary font-medium mb-6">Create a tailored outfit based on your profile.</p>
-          <div className="flex items-center gap-2 text-brand font-bold text-sm">
-            Generate Now <ArrowRight size={16} />
-          </div>
-        </Link>
-
-        <Link href="/history"
-          className="group relative overflow-hidden rounded-[24px] p-8 border border-ink-border bg-secondary hover:bg-white transition-all duration-300 shadow-sm hover:shadow-md">
-          <div className="w-12 h-12 rounded-2xl bg-white border border-ink-border flex items-center justify-center mb-6 shadow-sm">
-            <Clock size={20} className="text-ink-primary" strokeWidth={2} />
-          </div>
-          <h3 className="text-2xl font-bold text-ink-primary mb-2">History</h3>
-          <p className="text-ink-secondary font-medium mb-6">Review your past generated looks.</p>
-          <p className="text-ink-primary font-bold text-sm">
-            {history ? `${history.total} looks` : 'Browse collection'}
-          </p>
-        </Link>
-
-        <Link href="/profile"
-          className="group relative overflow-hidden rounded-[24px] p-8 border border-ink-border bg-secondary hover:bg-white transition-all duration-300 shadow-sm hover:shadow-md">
-          <div className="w-12 h-12 rounded-2xl bg-white border border-ink-border flex items-center justify-center mb-6 shadow-sm">
-            <Camera size={20} className="text-ink-primary" strokeWidth={2} />
-          </div>
-          <h3 className="text-2xl font-bold text-ink-primary mb-2">Identity</h3>
-          <p className="text-ink-secondary font-medium mb-6">Refine measurements & style preferences.</p>
-          <p className="text-ink-primary font-bold text-sm">Update settings</p>
-        </Link>
       </div>
 
-      {/* ── Recent looks ────────────────────────────────────── */}
-      <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }} transition={{ delay: 0.1 }}>
-        <div className="flex items-center justify-between mb-8">
-          <h2 className="text-3xl font-bold tracking-tight text-ink-primary">Recent Looks</h2>
-          {history && history.total > 0 && (
-            <Link href="/history" className="text-sm font-bold text-brand hover:underline">
-              View All
-            </Link>
-          )}
-        </div>
+      <div className="max-w-[1100px] mx-auto px-4 sm:px-6 md:px-8 py-6 md:py-10">
+        {/* ── Hero Generate Card ──────────────────── */}
+        <motion.div initial={{ opacity:0, y:12 }} animate={{ opacity:1, y:0 }} transition={{ duration:0.5, delay:0.1 }}>
+          <Link href="/recommend">
+            <div className="relative h-[220px] sm:h-[280px] lg:h-[340px] rounded overflow-hidden mb-10 group cursor-pointer">
+              <Image
+                src="https://images.unsplash.com/photo-1509631179647-0177331693ae?q=80&w=1600&auto=format&fit=crop"
+                fill className="object-cover transition-transform duration-1000 group-hover:scale-[1.03]" alt="Fashion Hero"
+                priority
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-ink-900/70 via-ink-900/20 to-transparent" />
+              <div className="absolute inset-0 p-10 flex flex-col justify-end">
+                <div className="inline-flex items-center gap-2 bg-white/15 backdrop-blur-sm border border-white/25 px-3 py-1.5 rounded-sm mb-4 self-start">
+                  <Sparkles size={10} className="text-white fill-white" />
+                  <span className="text-[10px] text-white font-bold uppercase tracking-[0.12em]">AI Curated</span>
+                </div>
+                <h2 className="font-display text-[clamp(22px,3vw,40px)] font-bold text-white tracking-tight mb-6">
+                  Spring Collection<br />Curated for You
+                </h2>
+                <div className="flex gap-3">
+                  <button className="btn-outline text-white border-white hover:bg-white hover:text-ink-900 text-[11px] h-9 px-5">Explore Collection</button>
+                  <button className="btn-primary text-[11px] h-9 px-5">Generate Outfit</button>
+                </div>
+              </div>
+            </div>
+          </Link>
+        </motion.div>
 
-        {histLoading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-            {[0,1,2].map(i => <OutfitCardSkeleton key={i} index={i} />)}
+        {/* ── Quick Actions ───────────────────────── */}
+        <section className="mb-10">
+          <div className="flex items-center justify-between mb-5">
+            <h2 className="font-display text-[20px] font-bold">Studio</h2>
           </div>
-        ) : recent.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-            {recent.map((rec, i) => (
-              <motion.div key={rec._id}
-                initial={{ opacity:0, y:12 }}
-                animate={{ opacity:1, y:0 }}
-                transition={{ delay: 0.05 * i }}>
-                <OutfitCard recommendation={rec} onOpen={() => setSelected(rec)} />
-              </motion.div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {[
+              { label: 'Wardrobe', sub: 'Manage your items', icon: Shirt, href: '/wardrobe', color: '#10B981' },
+              { label: 'Trends', sub: "What's hot today", icon: TrendingUp, href: '/trends', color: '#F59E0B' },
+              { label: 'History', sub: 'Your past looks', icon: History, href: '/history', color: '#2E5B8E' },
+            ].map((a, i) => (
+              <Link href={a.href} key={i}>
+                <Card variant="interactive" className="p-6 flex items-center gap-4">
+                  <div className="w-10 h-10 rounded flex items-center justify-center flex-shrink-0" style={{ backgroundColor: a.color + '18' }}>
+                    <a.icon size={18} style={{ color: a.color }} strokeWidth={2} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[14px] font-semibold text-ink-900">{a.label}</p>
+                    <p className="text-[12px] text-ink-400">{a.sub}</p>
+                  </div>
+                  <ChevronRight size={14} className="text-ink-300 flex-shrink-0" />
+                </Card>
+              </Link>
             ))}
           </div>
-        ) : (
-          <div className="flex flex-col items-center justify-center py-24 rounded-[24px] border border-ink-border bg-secondary text-center">
-            <div className="w-16 h-16 rounded-3xl bg-white flex items-center justify-center mb-6 shadow-sm">
-              <Sparkles size={28} className="text-brand/40" />
-            </div>
-            <h3 className="text-2xl font-bold text-ink-primary mb-2">No looks yet</h3>
-            <p className="text-ink-secondary mb-8 max-w-sm font-medium">
-              Start your journey with an AI-curated outfit.
-            </p>
-            <Link href="/recommend" className="inline-flex items-center justify-center px-10 py-4 font-bold text-white bg-brand rounded-full shadow-lg shadow-brand/20">
-              Generate First Look
+        </section>
+
+        {/* ── Recent Looks ─────────────────────────── */}
+        <section>
+          <div className="flex items-center justify-between mb-5">
+            <h2 className="font-display text-[20px] font-bold">Recent Looks</h2>
+            <Link href="/history" className="text-[12px] font-semibold text-brand hover:text-brand-dark uppercase tracking-wide transition-colors flex items-center gap-1">
+              View All <ChevronRight size={12} />
             </Link>
           </div>
-        )}
-      </motion.div>
 
-      {/* ── Detail Modal ────────────────────────────────────── */}
+          {histLoading ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-5">
+              {[0,1,2].map(i => <OutfitCardSkeleton key={i} index={i} />)}
+            </div>
+          ) : recent.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-5">
+              {recent.map((outfit, i) => (
+                <motion.div key={outfit._id} initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }} transition={{ duration:0.3, delay: i * 0.08 }}>
+                  <OutfitCard recommendation={outfit} onOpen={() => setSelected(outfit)} />
+                </motion.div>
+              ))}
+            </div>
+          ) : (
+            <Card className="flex flex-col items-center justify-center py-20 text-center border-dashed border-2 border-ink-200">
+              <div className="w-12 h-12 rounded border border-ink-200 flex items-center justify-center mb-5">
+                <Plus size={24} className="text-ink-300" strokeWidth={1.5} />
+              </div>
+              <h4 className="text-[16px] font-bold mb-2">No looks yet</h4>
+              <p className="text-[13px] text-ink-400 mb-6 max-w-xs">Your AI styling journey starts here.</p>
+              <Link href="/recommend"><Button variant="brand">Style Me Now</Button></Link>
+            </Card>
+          )}
+        </section>
+      </div>
+
       <AnimatePresence>
-        {selected && (
-          <OutfitDetail recommendation={selected} onClose={() => setSelected(null)} />
-        )}
+        {selected && <OutfitDetail recommendation={selected} onClose={() => setSelected(null)} />}
       </AnimatePresence>
-    </>
+    </div>
   )
 }

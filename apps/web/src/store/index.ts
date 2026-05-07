@@ -1,6 +1,9 @@
 import { create } from 'zustand'
 import { persist, devtools } from 'zustand/middleware'
-import type { UserProfile, OutfitRecommendation } from '../../../../packages/shared/src/schemas'
+import type { 
+  UserProfile, 
+  OutfitRecommendation,
+} from '../../../../packages/shared/src/schemas'
 import type { QuotaStatus } from '../lib/api-client'
 
 // ─────────────────────────────────────────────────────────────────

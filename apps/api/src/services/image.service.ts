@@ -27,6 +27,22 @@ export class ImageService {
     })
   }
 
+  getUploadSignature(folder: string) {
+    const timestamp = Math.round(new Date().getTime() / 1000)
+    const signature = cloudinary.utils.api_sign_request(
+      { timestamp, folder },
+      env.CLOUDINARY_API_SECRET
+    )
+
+    return {
+      signature,
+      timestamp,
+      apiKey:    env.CLOUDINARY_API_KEY,
+      cloudName: env.CLOUDINARY_CLOUD_NAME,
+      folder,
+    }
+  }
+
   async generateAndUpload(outfit: Outfit, traceId: string): Promise<string> {
     logger.info({ traceId, title: outfit.title }, 'Starting image generation')
 
@@ -53,10 +69,10 @@ export class ImageService {
 
     const uploaded = await cloudinary.uploader.upload(imageUrl, {
       folder:       'ai-fashion-stylist/outfits',
-      public_id:    `outfit-${traceId}-${Date.now()}`,
+      public_id:    `outfit-${outfit.title.toLowerCase().replace(/\s+/g, '-')}-${traceId.slice(0, 8)}`,
       transformation: [
         { quality: 'auto:best', fetch_format: 'auto' },
-        { width: 768, height: 768, crop: 'limit' },
+        { width: 512, height: 512, crop: 'limit' },
       ],
       tags:         ['outfit', 'ai-generated'],
     })
@@ -72,13 +88,10 @@ export class ImageService {
       'High-end fashion flat lay photography',
       `Full outfit: ${itemDescriptions}`,
       'Styling: ' + (outfit.stylingTips?.[0] || 'minimalist'),
-      'Arranged artistically on a clean white background',
-      'Neutral studio lighting',
-      'Sharp focus on textures and fabrics',
-      '8k resolution',
-      'Product photography',
-      'No people',
-      'Symmetric composition',
+      'Clean white background, studio lighting',
+      'Sharp focus',
+      'Realistic texture',
+      'No people, centered',
     ].join(', ')
   }
 
@@ -86,10 +99,10 @@ export class ImageService {
     const output = await this.replicate.run(SDXL_MODEL, {
       input: {
         prompt,
-        negative_prompt:     'blurry, low quality, watermark, text, logo, person, human, face, hands',
-        width:               768,
-        height:              768,
-        num_inference_steps: 30,
+        negative_prompt:     'blurry, watermark, text, person, face, hands',
+        width:               512,
+        height:              512,
+        num_inference_steps: 20, // Reduced from 30
         guidance_scale:      7.5,
         scheduler:           'K_EULER',
         apply_watermark:     false,
@@ -108,7 +121,6 @@ export class ImageService {
         num_inference_steps: 4,
         output_format:       'webp',
         output_quality:      80,
-        disable_safety_checker: false,
       },
     }) as string[]
 

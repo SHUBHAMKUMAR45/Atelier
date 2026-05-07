@@ -1,12 +1,35 @@
-import { createHash } from 'crypto'
+// Removed top-level import { createHash } from 'crypto' to fix Webpack runtime errors
 
 // ─────────────────────────────────────────────────────────────────
 // HASH UTILITIES
 // ─────────────────────────────────────────────────────────────────
 
+/**
+ * Browser-safe hashing utility.
+ * Uses Node's crypto in server environments and a simple fallback in browsers.
+ */
 export function hashCacheKey(parts: Record<string, unknown>): string {
   const normalized = JSON.stringify(parts, Object.keys(parts).sort())
-  return createHash('sha256').update(normalized).digest('hex').slice(0, 32)
+  
+  try {
+    // Use dynamic require to prevent Webpack initialization errors when crypto is false
+    if (typeof window === 'undefined') {
+      const crypto = require('crypto')
+      if (crypto && typeof crypto.createHash === 'function') {
+        return crypto.createHash('sha256').update(normalized).digest('hex').slice(0, 32)
+      }
+    }
+  } catch (err) {
+    // Fallback below
+  }
+
+  // Simple deterministic fallback for browser environments (DJB2-like)
+  let hash = 0
+  for (let i = 0; i < normalized.length; i++) {
+    hash = ((hash << 5) - hash) + normalized.charCodeAt(i)
+    hash |= 0 // Convert to 32bit integer
+  }
+  return `b-${Math.abs(hash).toString(16).padStart(30, '0')}`
 }
 
 export function hashRequestId(
@@ -14,6 +37,7 @@ export function hashRequestId(
   occasion: string,
   weatherSnapshot: { temp: number; condition: string },
   profileSnapshot: { budget: string; styles: string[] },
+  useWardrobe = false,
 ): string {
   // Bucket temperature to nearest 5°C to increase cache hits
   const tempBucket = Math.round(weatherSnapshot.temp / 5) * 5
@@ -24,6 +48,7 @@ export function hashRequestId(
     condition: weatherSnapshot.condition,
     budget:    profileSnapshot.budget,
     styles:    [...profileSnapshot.styles].sort(),
+    useWardrobe,
   })
 }
 
@@ -46,6 +71,7 @@ const INJECTION_PATTERNS: RegExp[] = [
   /do\s+anything\s+now/gi,
 ]
 
+// eslint-disable-next-line no-control-regex
 const CONTROL_CHARS = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g
 const MAX_FIELD_LENGTH = 500
 
@@ -86,29 +112,56 @@ export function sanitizeUserInput(data: Record<string, unknown>): Record<string,
 // JSON EXTRACTION (LLM output recovery)
 // ─────────────────────────────────────────────────────────────────
 
+/**
+ * Attempts to repair and parse partially truncated or malformed JSON from LLMs.
+ */
+export function repairJSON(text: string): unknown | null {
+  let cleaned = text.trim()
+  
+  // Basic recovery for unclosed braces/brackets
+  const stack: string[] = []
+  for (let i = 0; i < cleaned.length; i++) {
+    const char = cleaned[i]
+    if (char === '{')      stack.push('}')
+    else if (char === '[') stack.push(']')
+    else if (char === '}') stack.pop()
+    else if (char === ']') stack.pop()
+  }
+  
+  // Append missing closers in reverse order
+  while (stack.length > 0) {
+    cleaned += stack.pop()
+  }
+
+  try {
+    return JSON.parse(cleaned)
+  } catch {
+    return null
+  }
+}
+
 export function extractJSON(text: string): unknown | null {
   // Strategy 1: Direct parse
-  try {
-    return JSON.parse(text)
-  } catch {/* continue */}
+  try { return JSON.parse(text) } catch {/* continue */}
 
   // Strategy 2: Extract from markdown fences
   const fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/)
   if (fenceMatch?.[1]) {
-    try {
-      return JSON.parse(fenceMatch[1].trim())
-    } catch {/* continue */}
+    const content = fenceMatch[1].trim()
+    try { return JSON.parse(content) } catch {
+      return repairJSON(content)
+    }
   }
 
   // Strategy 3: Find first {...} block
   const braceMatch = text.match(/\{[\s\S]*\}/)
   if (braceMatch?.[0]) {
-    try {
-      return JSON.parse(braceMatch[0])
-    } catch {/* continue */}
+    try { return JSON.parse(braceMatch[0]) } catch {
+      return repairJSON(braceMatch[0])
+    }
   }
 
-  return null
+  return repairJSON(text)
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -144,8 +197,21 @@ export function sleep(ms: number): Promise<void> {
 // ─────────────────────────────────────────────────────────────────
 
 export function generateTraceId(): string {
-  return createHash('sha256')
-    .update(`${Date.now()}-${Math.random()}`)
-    .digest('hex')
-    .slice(0, 16)
+  try {
+    if (typeof window === 'undefined') {
+      const crypto = require('crypto')
+      if (crypto && typeof crypto.createHash === 'function') {
+        return crypto.createHash('sha256')
+          .update(`${Date.now()}-${Math.random()}`)
+          .digest('hex')
+          .slice(0, 16)
+      }
+    }
+  } catch (err) {
+    // Fallback below
+  }
+
+  // Browser-safe fallback
+  return Math.random().toString(36).substring(2, 10) + 
+         Math.random().toString(36).substring(2, 10)
 }

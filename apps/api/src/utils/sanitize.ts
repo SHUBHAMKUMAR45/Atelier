@@ -144,7 +144,7 @@ export function sanitizeObject<T extends Record<string, unknown>>(obj: T): T {
 // ─────────────────────────────────────────────────────────────────
 
 export class SecurityValidationError extends Error {
-  readonly statusCode = 400
+  readonly status = 400
   constructor(message: string) {
     super(message)
     this.name = 'SecurityValidationError'

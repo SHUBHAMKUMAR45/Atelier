@@ -23,6 +23,6 @@ export default function AppSectionLayout({
   children,
 }: {
   children: React.ReactNode
-}): JSX.Element {
+}): React.JSX.Element {
   return <>{children}</>
 }

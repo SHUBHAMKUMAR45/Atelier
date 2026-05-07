@@ -1,4 +1,5 @@
 const { getDefaultConfig } = require('expo/metro-config')
+const { withNativeWind } = require('nativewind/metro')
 const path = require('path')
 
 const projectRoot = __dirname
@@ -16,11 +17,9 @@ config.resolver.nodeModulesPaths = [
 ]
 
 // 3. Robust resolution for problematic packages
-// Intercept resolution to explicitly point to local node_modules
 config.resolver.resolveRequest = (context, moduleName, platform) => {
   if (moduleName.startsWith('swr') || moduleName.startsWith('clsx')) {
     try {
-      // Use require.resolve to find the actual file path (resolving main/module fields)
       const resolved = require.resolve(moduleName, {
         paths: [path.resolve(projectRoot, 'node_modules')],
       })
@@ -28,11 +27,8 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
         filePath: resolved,
         type: 'sourceFile',
       }
-    } catch (e) {
-      // If resolution fails, fall back to default behavior
-    }
+    } catch (e) {}
   }
-  // Standard resolution fallback
   return context.resolveRequest(context, moduleName, platform)
 }
 
@@ -53,4 +49,5 @@ config.resolver.sourceExts = [
   'js', 'jsx', 'ts', 'tsx', 'cjs', 'json',
 ]
 
-module.exports = config
+module.exports = withNativeWind(config, { input: './global.css' })
+

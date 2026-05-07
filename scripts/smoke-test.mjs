@@ -188,9 +188,9 @@ await test('GET /api/v1/recommend/history → 200 paginated', async () => {
   const res = await req('GET', '/api/v1/recommend/history?page=1&limit=5')
   assertStatus(res, 200)
   assert(res.data.success, 'success:false')
-  assert(Array.isArray(res.data.items), 'items not array')
-  assert(typeof res.data.total === 'number', 'total not number')
-  assert(typeof res.data.pages === 'number', 'pages not number')
+  assert(Array.isArray(res.data.data?.items), 'items not array - got: ' + JSON.stringify(res.data.data))
+  assert(typeof res.data.data?.total === 'number', 'total not number')
+  assert(typeof res.data.data?.pages === 'number', 'pages not number')
 })
 
 await test('GET /api/v1/recommend/history → 400 on invalid page', async () => {

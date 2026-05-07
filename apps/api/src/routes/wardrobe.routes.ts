@@ -4,13 +4,14 @@ import { authMiddleware } from '../middleware/rbac.middleware'
 import { validateBody } from '../middleware'
 import { CreateWardrobeItemRequestSchema } from '../../../../packages/shared/src/schemas'
 
-const router = Router()
+const router: Router = Router()
 
 // All routes require authentication
 router.use(authMiddleware)
-
-router.get(   '/',    ctrl.getItems)
-router.post(  '/',    validateBody(CreateWardrobeItemRequestSchema), ctrl.addItem)
-router.delete('/:id', ctrl.deleteItem)
+ 
+router.get(   '/signature', ctrl.getUploadSignature)
+router.get(   '/',          ctrl.getItems)
+router.post(  '/',          validateBody(CreateWardrobeItemRequestSchema), ctrl.addItem)
+router.delete('/:id',       ctrl.deleteItem)
 
 export default router

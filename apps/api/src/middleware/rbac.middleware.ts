@@ -4,7 +4,9 @@ import { env }           from '../config/env'
 import { logger }        from '../config/logger'
 import { metrics }       from '../utils/metrics'
 import { sanitizeInput } from '../utils/sanitize'
+import { todayDateString } from '../../../../packages/shared/src/utils'
 import { UserProfileModel } from '../db/models'
+import { problemDetails }    from './index'
 
 // ─────────────────────────────────────────────────────────────────
 // RBAC ROLE DEFINITIONS
@@ -22,16 +24,7 @@ export const ROLE_PERMISSIONS: Record<Role, string[]> = {
 // AUGMENT EXPRESS REQUEST
 // ─────────────────────────────────────────────────────────────────
 
-declare global {
-  namespace Express {
-    interface Request {
-      userId:  string
-      traceId: string
-      role:    Role
-      permissions: string[]
-    }
-  }
-}
+// Augmentations moved to src/types/express.d.ts
 
 // ─────────────────────────────────────────────────────────────────
 // AUTH + RBAC MIDDLEWARE
@@ -42,13 +35,39 @@ export async function authMiddleware(
   res: Response,
   next: NextFunction,
 ): Promise<void> {
+  // ── Testing Bypass ───────────────────────────────────────────
+  if (env.NODE_ENV !== 'production' && process.env['BYPASS_AUTH'] === 'true') {
+    req.userId      = (req.headers['x-test-user-id'] as string) || 'test_user_smoke'
+    req.role        = 'user'
+    req.permissions = ROLE_PERMISSIONS['user']
+
+    // Fire-and-forget: never blocks the request
+    if (process.env['SKIP_DB'] !== 'true') {
+      UserProfileModel.findOneAndUpdate(
+        { clerkUserId: req.userId },
+        {
+          $setOnInsert: {
+            clerkUserId:  req.userId,
+            email:        'smoke-test@ai-fashion.app',
+            displayName:  'Smoke Tester',
+            dailyQuota:   { date: todayDateString(), count: 0 },
+          },
+        },
+        { upsert: true, new: true },
+      ).lean().catch((e: unknown) => {
+        logger.warn({ e }, 'Bypass lazy sync failed (non-fatal)')
+      })
+    }
+
+    next()
+    return
+  }
+
   const authHeader = req.headers.authorization
 
   if (!authHeader?.startsWith('Bearer ')) {
     metrics.authFailures.inc({ reason: 'missing-header' })
-    res.status(401).json(rfc7807(
-      'https://api.ai-fashion.app/errors/unauthorized',
-      'Unauthorized',
+    res.status(401).json(problemDetails(
       401,
       'Missing or malformed Authorization header',
       req.traceId,
@@ -63,9 +82,7 @@ export async function authMiddleware(
 
     if (!payload.sub) {
       metrics.authFailures.inc({ reason: 'missing-subject' })
-      res.status(401).json(rfc7807(
-        'https://api.ai-fashion.app/errors/unauthorized',
-        'Unauthorized',
+      res.status(401).json(problemDetails(
         401,
         'Invalid token: missing subject',
         req.traceId,
@@ -81,39 +98,46 @@ export async function authMiddleware(
     req.role        = role
     req.permissions = ROLE_PERMISSIONS[role]
 
-    // ── Lazy Sync with MongoDB ───────────────────────────────
+    // ── Lazy Sync with MongoDB (FIRE-AND-FORGET) ─────────────────
     // Ensures a local DB record exists for this Clerk user.
-    // This fixes persistence issues for new users.
-    try {
-      const email = (payload['email'] as string) || (payload['primary_email_address'] as string) || 'no-email@clerk.user'
-      const name  = (payload['name'] as string) || (payload['full_name'] as string) || 'Fashion Enthusiast'
+    // Does NOT block the request — errors are logged but never surface to client.
+    // todayDateString() used for consistent date format with the quota system.
+    if (process.env['SKIP_DB'] !== 'true') {
+      const email = (payload['email'] as string) ||
+                    (payload['primary_email_address'] as string) ||
+                    (payload['email_address'] as string) ||
+                    'no-email@clerk.user'
 
-      await UserProfileModel.findOneAndUpdate(
+      const name  = (payload['name'] as string) ||
+                    (payload['full_name'] as string) ||
+                    (payload['given_name'] as string) ||
+                    'Fashion Enthusiast'
+
+      // Deliberately NOT awaited — fire-and-forget
+      UserProfileModel.findOneAndUpdate(
         { clerkUserId: payload.sub },
-        { 
-          $setOnInsert: { 
-            clerkUserId: payload.sub,
-            email: email,
-            displayName: name,
-            dailyQuota: { date: new Date().toISOString().split('T')[0], count: 0 }
-          }
+        {
+          $setOnInsert: {
+            clerkUserId:  payload.sub,
+            email,
+            displayName:  name,
+            dailyQuota:   { date: todayDateString(), count: 0 },
+          },
         },
-        { upsert: true, new: true }
-      ).lean()
-    } catch (syncErr) {
-      logger.error({ syncErr, userId: payload.sub }, 'Failed to sync user with MongoDB')
-      // We don't block the request if sync fails, but we log it.
-      // Most routes will hit 404 later if the record is truly missing.
+        { upsert: true, new: true },
+      ).lean().then(() => {
+        logger.debug({ userId: payload.sub, email }, 'Lazy Sync OK')
+      }).catch((syncErr: unknown) => {
+        logger.error({ syncErr, userId: payload.sub }, 'Lazy Sync failed (non-fatal)')
+      })
     }
 
-    logger.debug({ traceId: req.traceId, userId: req.userId, role }, 'Auth verified and synced')
+    logger.debug({ traceId: req.traceId, userId: req.userId, role }, 'Auth verified')
     next()
   } catch (err) {
     metrics.authFailures.inc({ reason: 'invalid-token' })
     logger.warn({ err, traceId: req.traceId }, 'Auth verification failed')
-    res.status(401).json(rfc7807(
-      'https://api.ai-fashion.app/errors/unauthorized',
-      'Unauthorized',
+    res.status(401).json(problemDetails(
       401,
       'Invalid or expired token',
       req.traceId,
@@ -135,9 +159,7 @@ export function requirePermission(permission: string) {
         role:       req.role,
         permission,
       }, 'Permission denied')
-      res.status(403).json(rfc7807(
-        'https://api.ai-fashion.app/errors/forbidden',
-        'Forbidden',
+      res.status(403).json(problemDetails(
         403,
         `Permission '${permission}' required`,
         req.traceId,
@@ -188,22 +210,4 @@ function deepSanitize(obj: unknown): unknown {
 
 function isValidRole(role: unknown): role is Role {
   return role === 'user' || role === 'admin' || role === 'moderator'
-}
-
-// RFC 7807 Problem Details factory
-export function rfc7807(
-  type:     string,
-  title:    string,
-  status:   number,
-  detail:   string,
-  traceId?: string,
-): Record<string, unknown> {
-  return {
-    type,
-    title,
-    status,
-    detail,
-    instance: traceId ? `/trace/${traceId}` : undefined,
-    traceId,
-  }
 }

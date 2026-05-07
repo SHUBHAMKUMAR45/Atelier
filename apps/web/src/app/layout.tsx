@@ -32,24 +32,24 @@ export const viewport: Viewport = {
   width:       'device-width',
 }
 
-import { GlobalExperience } from '../components/layout/GlobalExperience'
-import { SmoothScroll } from '../components/home/SmoothScroll'
+import { ClientExperience } from '../components/layout/ClientExperience'
+import { ApiAuthConfig }    from '../components/auth/ApiAuthConfig'
 
 export default function RootLayout({
   children,
 }: {
   children: React.ReactNode
-}): JSX.Element {
+}): React.JSX.Element {
   return (
     <ClerkProvider>
       <html lang="en" suppressHydrationWarning>
-        <body className="min-h-screen bg-ink-900 antialiased text-white relative">
-          <GlobalExperience />
-          <SmoothScroll>
+        <body className="min-h-screen antialiased relative">
+          <ApiAuthConfig />
+          <ClientExperience>
             <div className="relative z-10 min-h-screen">
               {children}
             </div>
-          </SmoothScroll>
+          </ClientExperience>
           <Toaster
             position="bottom-right"
             toastOptions={{

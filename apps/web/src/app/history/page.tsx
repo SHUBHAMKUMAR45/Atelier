@@ -1,178 +1,125 @@
 'use client'
 
-import { useState }              from 'react'
+import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Search, Heart, Grid3X3, List } from 'lucide-react'
-import { useAuth }               from '@clerk/nextjs'
-import { mutate }                from 'swr'
-import { useHistory }            from '../../hooks'
+import { Search, Heart, LayoutGrid, List } from 'lucide-react'
+import { useAuth } from '@clerk/nextjs'
+import { mutate } from 'swr'
+import { useHistory } from '../../hooks'
+import { Button } from '../../components/ui/Button'
+import { ErrorState } from '../../components/ui/ErrorState'
 import { OutfitCard, OutfitCardSkeleton } from '../../components/outfit/OutfitCard'
-import { OutfitDetail }          from '../../components/outfit/OutfitDetail'
-import { AppLayout }             from '../../components/layout/AppLayout'
-import { api }                   from '../../lib/api-client'
-import { toast }                 from 'sonner'
+import { OutfitDetail } from '../../components/outfit/OutfitDetail'
+import { AppLayout } from '../../components/layout/AppLayout'
+import { api } from '../../lib/api-client'
+import { toast } from 'sonner'
+import { cn } from '../../lib/utils'
 import type { OutfitRecommendation } from '../../../../../packages/shared/src/schemas'
 
-const OCCASIONS = ['all','casual','work','date','party','outdoor','gym','travel','wedding'] as const
+const OCCASIONS = ['all', 'casual', 'work', 'date', 'party', 'outdoor', 'gym', 'travel', 'wedding'] as const
 
-export default function HistoryPage() : JSX.Element {
-  const { getToken }        = useAuth()
+export default function HistoryPage(): React.JSX.Element {
+  useAuth()
   const [page, setPage]     = useState(1)
   const [filter, setFilter] = useState<string>('all')
   const [view, setView]     = useState<'grid' | 'list'>('grid')
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState<OutfitRecommendation | null>(null)
 
-  const { data, isLoading, error } = useHistory(page)
-
-  const items = data?.items ?? []
+  const { data, isLoading, error, refresh } = useHistory(page)
+  const items    = data?.items ?? []
   const filtered = items.filter(r => {
-    const matchOccasion = filter === 'all' || r.occasion === filter
-    const matchSearch   = !search || r.outfit.title.toLowerCase().includes(search.toLowerCase())
-    return matchOccasion && matchSearch
+    const matchOcc = filter === 'all' || r.occasion === filter
+    const matchS   = !search || r.outfit.title.toLowerCase().includes(search.toLowerCase())
+    return matchOcc && matchS
   })
 
   async function handleDelete(id: string) {
-    try {
-      const token = await getToken()
-      if (!token) return
-      await api.recommend.delete(token, id)
-      await mutate('history-1')
-      toast.success('Outfit removed')
-    } catch {
-      toast.error('Could not remove outfit')
-    }
+    try { await api.recommend.delete(id); await mutate(['history', page]); toast.success('Outfit removed') }
+    catch { toast.error('Could not remove outfit') }
   }
 
   return (
     <AppLayout>
-      {/* ── Header ─────────────────────────────────────────── */}
-      <motion.div initial={{ opacity:0, y:12 }} animate={{ opacity:1, y:0 }} className="mb-12">
-        <p className="text-[13px] font-bold text-ink-secondary uppercase tracking-widest mb-4">Your Wardrobe</p>
-        <div className="flex items-end justify-between">
-          <h1 className="text-4xl md:text-6xl font-black tracking-tighter text-ink-primary leading-tight">
-            Outfit History
-          </h1>
-          {data && (
-            <span className="text-[15px] font-bold text-ink-secondary mb-2 whitespace-nowrap">{data.total} looks</span>
+      <div className="bg-[#F8F8F7] min-h-screen">
+        {/* Header */}
+        <div className="bg-white border-b border-ink-200 px-4 sm:px-6 md:px-8 py-5 md:py-7">
+          <div className="max-w-[1100px] mx-auto flex items-end justify-between gap-4">
+            <div>
+              <p className="label-caps mb-1">Aesthetic Archive</p>
+              <h1 className="font-display text-[clamp(24px,3vw,36px)] font-bold">Outfit History</h1>
+            </div>
+            {data && <span className="text-[13px] text-ink-400 mb-1">{data.total} looks</span>}
+          </div>
+        </div>
+
+        <div className="max-w-[1100px] mx-auto px-4 sm:px-6 md:px-8 py-6 md:py-8">
+          {/* Controls */}
+          <div className="flex flex-col md:flex-row gap-3 mb-6">
+            <div className="relative flex-1">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
+              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search looks…" className="input-field pl-9 h-10 text-[13px]" />
+            </div>
+            <div className="flex gap-2">
+              {(['grid','list'] as const).map(v => (
+                <button key={v} onClick={() => setView(v)} className={cn('w-10 h-10 rounded flex items-center justify-center border transition-all', view === v ? 'bg-ink-900 text-white border-ink-900' : 'bg-white border-ink-200 text-ink-400 hover:border-ink-400')}>
+                  {v === 'grid' ? <LayoutGrid size={14} /> : <List size={14} />}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Occasion filters */}
+          <div className="flex gap-2 overflow-x-auto hide-scrollbar mb-8 pb-1">
+            {OCCASIONS.map(occ => (
+              <button key={occ} onClick={() => setFilter(occ)}
+                className={cn('flex-shrink-0 px-4 h-8 rounded-sm text-[12px] font-semibold uppercase tracking-wide transition-all border capitalize', filter === occ ? 'bg-brand text-white border-brand' : 'bg-white border-ink-200 text-ink-500 hover:border-ink-400')}>
+                {occ === 'all' ? 'All' : occ}
+              </button>
+            ))}
+          </div>
+
+          {/* Content */}
+          {isLoading ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-5">
+              {[0,1,2,3,4,5].map(i => <OutfitCardSkeleton key={i} index={i} />)}
+            </div>
+          ) : error ? (
+            <ErrorState
+              title="Couldn\'t load your history"
+              message="There was a problem connecting to Atelier. Your outfits are safe — check your connection and try again."
+              onRetry={() => refresh()}
+            />
+          ) : filtered.length === 0 ? (
+            <div className="text-center py-20 border-2 border-dashed border-ink-200 rounded">
+              <Heart size={28} className="text-ink-300 mx-auto mb-4" strokeWidth={1.5} />
+              <h4 className="text-[15px] font-bold mb-2">{search || filter !== 'all' ? 'No matches' : 'Empty collection'}</h4>
+              <p className="text-[13px] text-ink-400">{search || filter !== 'all' ? 'Adjust your search or filters.' : 'Your curated outfits will appear here.'}</p>
+            </div>
+          ) : (
+            <motion.div className={cn('gap-5', view === 'grid' ? 'grid grid-cols-1 md:grid-cols-3' : 'flex flex-col')} initial={{ opacity:0 }} animate={{ opacity:1 }}>
+              {filtered.map((rec, i) => (
+                <motion.div key={rec._id} initial={{ opacity:0, y:6 }} animate={{ opacity:1, y:0 }} transition={{ duration:0.2, delay: i * 0.04 }}>
+                  <OutfitCard recommendation={rec} onOpen={() => setSelected(rec)} onDelete={handleDelete} index={i} />
+                </motion.div>
+              ))}
+            </motion.div>
+          )}
+
+          {/* Pagination */}
+          {data && data.pages > 1 && (
+            <div className="flex items-center justify-center gap-8 mt-16">
+              <Button variant="outline" onClick={() => setPage(p => Math.max(1, p-1))} disabled={page === 1}>Back</Button>
+              <span className="text-[13px] font-semibold text-ink-600">{page} / {data.pages}</span>
+              <Button variant="outline" onClick={() => setPage(p => Math.min(data.pages, p+1))} disabled={page === data.pages}>Forward</Button>
+            </div>
           )}
         </div>
-      </motion.div>
 
-      {/* ── Search + Controls ─────────────────────────────── */}
-      <div className="flex flex-col md:flex-row items-stretch md:items-center gap-4 mb-10">
-        <div className="relative flex-1">
-          <Search size={18} className="absolute left-5 top-1/2 -translate-y-1/2 text-ink-secondary" />
-          <input
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Search your looks…"
-            className="w-full bg-white border border-ink-border rounded-[20px] shadow-sm
-                       pl-12 pr-4 py-4 text-[16px] font-medium text-ink-primary
-                       placeholder:text-ink-secondary focus:outline-none focus:ring-4 focus:ring-brand/5 focus:border-brand/40 transition-all"
-          />
-        </div>
-        <div className="flex items-center self-end border border-ink-border rounded-[20px] overflow-hidden shadow-sm bg-white p-1">
-          <button onClick={() => setView('grid')}
-            className={clsx(
-              "p-3 rounded-lg transition-all",
-              view==='grid' ? 'bg-secondary text-brand' : 'text-ink-secondary hover:text-ink-primary'
-            )}>
-            <Grid3X3 size={20} />
-          </button>
-          <button onClick={() => setView('list')}
-            className={clsx(
-              "p-3 rounded-lg transition-all",
-              view==='list' ? 'bg-secondary text-brand' : 'text-ink-secondary hover:text-ink-primary'
-            )}>
-            <List size={20} />
-          </button>
-        </div>
+        <AnimatePresence>
+          {selected && <OutfitDetail recommendation={selected} onClose={() => setSelected(null)} />}
+        </AnimatePresence>
       </div>
-
-      {/* ── Filter Pills ─────────────────────────── */}
-      <div className="flex gap-3 overflow-x-auto pb-6 mb-10 hide-scrollbar scroll-smooth">
-        {OCCASIONS.map(occ => (
-          <button key={occ}
-            onClick={() => setFilter(occ)}
-            className={clsx(
-              "flex-shrink-0 text-[14px] font-bold px-6 py-2.5 rounded-full border transition-all duration-200 capitalize",
-              filter === occ
-                ? 'bg-brand text-white border-brand shadow-md scale-[1.02]'
-                : 'bg-white text-ink-secondary border-ink-border hover:bg-secondary'
-            )}>
-            {occ === 'all' ? 'All' : occ}
-          </button>
-        ))}
-      </div>
-
-      {/* ── Content ───────────────────────────────────── */}
-      {isLoading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
-          {[0,1,2,3,4,5,6,7].map(i => <div key={i} className="aspect-[3/4] rounded-[24px] bg-secondary animate-pulse" />)}
-        </div>
-      ) : error ? (
-        <div className="text-center py-24 text-ink-secondary font-bold text-lg">
-          Connection lost. Please refresh.
-        </div>
-      ) : filtered.length === 0 ? (
-        <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }}
-          className="text-center py-32 bg-secondary/30 rounded-[32px] border border-ink-border border-dashed mt-4">
-          <div className="w-20 h-20 rounded-3xl bg-white flex items-center justify-center mx-auto mb-8 shadow-sm">
-            <Heart size={32} className="text-brand/40" />
-          </div>
-          <h3 className="text-2xl font-black text-ink-primary mb-3">
-            {search || filter !== 'all' ? 'No matches' : 'Empty collection'}
-          </h3>
-          <p className="text-ink-secondary font-medium max-w-sm mx-auto">
-            {search || filter !== 'all' ? 'Adjust your filters to see more.' : 'Your generated outfits will appear here.'}
-          </p>
-        </motion.div>
-      ) : (
-        <motion.div
-          className={view === 'grid' ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8' : 'flex flex-col gap-6'}
-          initial={{ opacity:0 }} animate={{ opacity:1 }}>
-          {filtered.map((rec, i) => (
-            <motion.div key={rec._id}
-              initial={{ opacity:0, y:12 }}
-              animate={{ opacity:1, y:0 }}
-              transition={{ delay: i * 0.04 }}>
-              <OutfitCard
-                recommendation={rec}
-                onOpen={() => setSelected(rec)}
-                onDelete={handleDelete}
-                index={i}
-              />
-            </motion.div>
-          ))}
-        </motion.div>
-      )}
-
-      {/* ── Pagination ────────────────────────────────────── */}
-      {data && data.pages > 1 && (
-        <div className="flex items-center justify-center gap-8 mt-20">
-          <button onClick={() => setPage(p => Math.max(1, p-1))} disabled={page === 1}
-            className="px-8 py-3 text-[15px] font-black rounded-xl border border-ink-border bg-white text-ink-primary
-                       disabled:opacity-20 hover:bg-secondary transition-all shadow-sm active:scale-95">
-            Previous
-          </button>
-          <span className="text-[15px] font-black text-ink-primary">
-            {page} / {data.pages}
-          </span>
-          <button onClick={() => setPage(p => Math.min(data.pages, p+1))} disabled={page === data.pages}
-            className="px-8 py-3 text-[15px] font-black rounded-full border border-ink-border bg-white text-ink-primary
-                       disabled:opacity-20 hover:bg-secondary transition-all shadow-sm active:scale-95">
-            Next
-          </button>
-        </div>
-      )}
-
-      {/* ── Detail Modal ──────────────────────────────────── */}
-      <AnimatePresence>
-        {selected && (
-          <OutfitDetail recommendation={selected} onClose={() => setSelected(null)} />
-        )}
-      </AnimatePresence>
     </AppLayout>
   )
 }

@@ -1,4 +1,4 @@
-import { UserProfileModel } from '../db/models'
+import { userRepository } from '../repositories/user.repository'
 import { todayDateString, addDays } from '../../../../packages/shared/src/utils'
 import { logger } from '../config/logger'
 import { env }    from '../config/env'
@@ -9,6 +9,14 @@ import type {
   UserProfile,
 } from '../../../../packages/shared/src/schemas'
 
+export class PersistenceError extends Error {
+  readonly status = 500
+  constructor(message: string) {
+    super(message)
+    this.name = 'PersistenceError'
+  }
+}
+
 export class ProfileService {
   // ── Create or update user profile ──────────────────────────────
 
@@ -18,38 +26,24 @@ export class ProfileService {
   ): Promise<UserProfile> {
     const today = todayDateString()
 
-    const doc = await UserProfileModel.findOneAndUpdate(
-      { clerkUserId },
-      {
-        $set: {
-          email:        data.email,
-          displayName:  data.displayName,
-          ...(data.measurements && { measurements: data.measurements }),
-          ...(data.preferences  && { preferences:  data.preferences }),
-          ...(data.location     && { location:      data.location }),
-        },
-        $setOnInsert: {
-          clerkUserId,
-          dailyQuota: { date: today, count: 0 },
-        },
-      },
-      { upsert: true, new: true, runValidators: true },
-    ).lean()
+    const profile = await userRepository.upsert(clerkUserId, {
+      email:        data.email,
+      displayName:  data.displayName,
+      ...(data.measurements && { measurements: data.measurements }),
+      ...(data.preferences  && { preferences:  data.preferences }),
+      ...(data.location     && { location:      data.location }),
+      dailyQuota: { date: today, count: 0 },
+    })
 
-    if (!doc) throw new Error('Failed to upsert profile')
-
+    // MongoDB write concern 'majority' guarantees durability — no read-after-write needed
     logger.info({ clerkUserId }, 'Profile upserted')
-    return this.mapToProfile(doc)
+    return profile
   }
 
   // ── Get profile by Clerk user ID ────────────────────────────────
 
   async getProfile(clerkUserId: string): Promise<UserProfile | null> {
-    const doc = await UserProfileModel
-      .findOne({ clerkUserId })   // ALWAYS scoped by clerkUserId
-      .lean()
-
-    return doc ? this.mapToProfile(doc) : null
+    return userRepository.findByClerkId(clerkUserId)
   }
 
   // ── Update measurements ─────────────────────────────────────────
@@ -58,12 +52,8 @@ export class ProfileService {
     clerkUserId: string,
     measurements: BodyMeasurements,
   ): Promise<void> {
-    await UserProfileModel.findOneAndUpdate(
-      { clerkUserId },
-      { $set: { measurements } },
-      { upsert: true, runValidators: true }
-    )
-    logger.debug({ clerkUserId }, 'Measurements updated (upserted)')
+    await userRepository.updateField(clerkUserId, 'measurements', measurements)
+    logger.debug({ clerkUserId }, 'Measurements updated')
   }
 
   // ── Update preferences ──────────────────────────────────────────
@@ -72,12 +62,8 @@ export class ProfileService {
     clerkUserId: string,
     preferences: UserPreferences,
   ): Promise<void> {
-    await UserProfileModel.findOneAndUpdate(
-      { clerkUserId },
-      { $set: { preferences } },
-      { upsert: true, runValidators: true }
-    )
-    logger.debug({ clerkUserId }, 'Preferences updated (upserted)')
+    await userRepository.updateField(clerkUserId, 'preferences', preferences)
+    logger.debug({ clerkUserId }, 'Preferences updated')
   }
 
   // ── Check and consume daily quota (ATOMIC) ──────────────────────
@@ -87,57 +73,45 @@ export class ProfileService {
     const today = todayDateString()
     const limit = env.DAILY_QUOTA_LIMIT
 
-    // Atomic: reset if new day, then increment only if under limit
-    // Pattern: findOneAndUpdate with conditional $inc
+    const currentCount = await userRepository.incrementQuota(clerkUserId, today)
 
-    // First, reset quota if date has changed
-    await UserProfileModel.updateOne(
-      { clerkUserId, 'dailyQuota.date': { $ne: today } },
-      { $set: { 'dailyQuota.date': today, 'dailyQuota.count': 0 } },
-    )
-
-    // Now atomically increment if under limit
-    const result = await UserProfileModel.findOneAndUpdate(
-      {
-        clerkUserId,
-        'dailyQuota.date':  today,
-        'dailyQuota.count': { $lt: limit },
-      },
-      { $inc: { 'dailyQuota.count': 1 } },
-      { new: true },
-    ).lean()
-
-    if (!result) {
-      logger.warn({ clerkUserId, today }, 'Daily quota exceeded')
+    if (currentCount > limit) {
+      logger.warn({ clerkUserId, today, count: currentCount, limit }, 'Daily quota exceeded')
       return false
     }
 
     logger.debug(
-      { clerkUserId, count: result.dailyQuota?.count ?? 0, limit },
+      { clerkUserId, count: currentCount, limit },
       'Quota consumed',
     )
     return true
   }
 
-  // ── Get quota status ────────────────────────────────────────────
+  // ── Rollback quota (call on AI failure AFTER consumeQuota) ────────
+  async rollbackQuota(clerkUserId: string): Promise<void> {
+    const today = todayDateString()
+    try {
+      await userRepository.decrementQuota(clerkUserId, today)
+      logger.info({ clerkUserId }, 'Quota rolled back after AI failure')
+    } catch (err) {
+      // Non-fatal: log but don't throw — quota rollback failure is better than crashing
+      logger.error({ clerkUserId, err }, 'Failed to rollback quota')
+    }
+  }
 
-  async getQuotaStatus(clerkUserId: string): Promise<{
+  // ── Get quota status from an already-fetched profile (zero extra DB reads) ──
+  computeQuotaFromProfile(profile: UserProfile | null): {
     used:      number
     limit:     number
     remaining: number
     resetAt:   string
-  }> {
-    const profile = await UserProfileModel
-      .findOne({ clerkUserId })
-      .select('dailyQuota')
-      .lean()
-
-    const today  = todayDateString()
-    const count  = profile?.dailyQuota?.date === today
+  } {
+    const today    = todayDateString()
+    const count    = profile?.dailyQuota?.date === today
       ? (profile.dailyQuota.count ?? 0)
       : 0
-    const limit     = env.DAILY_QUOTA_LIMIT
-    const tomorrow  = addDays(new Date(), 1)
+    const limit    = env.DAILY_QUOTA_LIMIT
+    const tomorrow = addDays(new Date(), 1)
     tomorrow.setHours(0, 0, 0, 0)
 
     return {
@@ -148,21 +122,15 @@ export class ProfileService {
     }
   }
 
-  // ── Type mapper ─────────────────────────────────────────────────
-
-  private mapToProfile(doc: Record<string, unknown>): UserProfile {
-    return {
-      _id:          String(doc._id),
-      clerkUserId:  doc.clerkUserId as string,
-      email:        doc.email as string,
-      displayName:  doc.displayName as string,
-      measurements: doc.measurements as UserProfile['measurements'],
-      preferences:  doc.preferences  as UserProfile['preferences'],
-      location:     doc.location     as UserProfile['location'],
-      dailyQuota:   doc.dailyQuota   as UserProfile['dailyQuota'],
-      createdAt:    doc.createdAt as Date,
-      updatedAt:    doc.updatedAt as Date,
-    }
+  // ── Get quota status (standalone, issues its own DB read) ──────
+  async getQuotaStatus(clerkUserId: string): Promise<{
+    used:      number
+    limit:     number
+    remaining: number
+    resetAt:   string
+  }> {
+    const profile = await userRepository.findByClerkId(clerkUserId)
+    return this.computeQuotaFromProfile(profile)
   }
 }
 

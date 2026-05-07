@@ -1,98 +1,71 @@
-import { Tabs }             from 'expo-router'
-import { BlurView }         from 'expo-blur'
-import { StyleSheet, View, Platform } from 'react-native'
-import { useUserStore }     from '../../store'
-import { COLORS, SHADOWS }  from '../../theme'
-import {
-  LayoutDashboard, Sparkles, History, User, Shirt, TrendingUp,
-} from 'lucide-react-native'
+import { Tabs } from 'expo-router';
+import { View, Platform } from 'react-native';
+import { Home, Heart, Plus, ShoppingBag, User } from 'lucide-react-native';
+
+function TabIcon({ icon: Icon, focused }: { icon: any; focused: boolean }) {
+  return (
+    <View className="items-center justify-center pt-2">
+      <Icon size={24} color={focused ? '#111111' : '#9CA3AF'} strokeWidth={focused ? 2.5 : 2} />
+    </View>
+  );
+}
+
+function StyleFAB({ focused }: { focused: boolean }) {
+  return (
+    <View className={`w-[52px] h-[52px] rounded-full items-center justify-center -mt-6 shadow-md shadow-accent/30 ${focused ? 'bg-accent/90' : 'bg-accent'}`}>
+      <Plus size={24} color="#FFFFFF" strokeWidth={3} />
+    </View>
+  );
+}
 
 export default function TabLayout() {
-  const { quota } = useUserStore()
-
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: COLORS.brand,
-        tabBarInactiveTintColor: COLORS.secondary,
-        tabBarStyle: styles.tabBar,
-        tabBarBackground: () => (
-          <BlurView intensity={80} tint="light" style={StyleSheet.absoluteFill} />
-        ),
-        tabBarLabelStyle: styles.label,
-        sceneContainerStyle: { backgroundColor: COLORS.background },
+        tabBarShowLabel: false,
+        tabBarStyle: {
+          position: 'absolute',
+          bottom: Platform.OS === 'ios' ? 32 : 24,
+          left: 24,
+          right: 24,
+          height: 64,
+          backgroundColor: '#FFFFFF',
+          borderRadius: 32,
+          borderTopWidth: 0,
+          shadowColor: '#111111',
+          shadowOffset: { width: 0, height: 8 },
+          shadowOpacity: 0.1,
+          shadowRadius: 24,
+          elevation: 10,
+        },
       }}
     >
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Studio',
-          tabBarIcon: ({ color, focused }) => <LayoutDashboard size={22} color={color} strokeWidth={focused ? 2.5 : 2} />,
-        }}
+      <Tabs.Screen 
+        name="index" 
+        options={{ tabBarIcon: ({ focused }) => <TabIcon icon={Home} focused={focused} /> }} 
       />
-      <Tabs.Screen
-        name="recommend"
-        options={{
-          title: 'Style Me',
-          tabBarIcon: ({ color, focused }) => (
-            <View>
-              <Sparkles size={22} color={color} strokeWidth={focused ? 2.5 : 2} />
-              {(quota?.remaining ?? 0) > 0 && (
-                <View style={[styles.dot, { backgroundColor: COLORS.brand }]} />
-              )}
-            </View>
-          ),
-        }}
+      <Tabs.Screen 
+        name="favorites" 
+        options={{ tabBarIcon: ({ focused }) => <TabIcon icon={Heart} focused={focused} /> }} 
       />
-      <Tabs.Screen
-        name="trends"
-        options={{
-          title: 'Trends',
-          tabBarIcon: ({ color, focused }) => <TrendingUp size={22} color={color} strokeWidth={focused ? 2.5 : 2} />,
-        }}
+      <Tabs.Screen 
+        name="stylist" 
+        options={{ tabBarIcon: ({ focused }) => <StyleFAB focused={focused} /> }} 
       />
-      <Tabs.Screen
-        name="wardrobe"
-        options={{
-          title: 'Wardrobe',
-          tabBarIcon: ({ color, focused }) => <Shirt size={22} color={color} strokeWidth={focused ? 2.5 : 2} />,
-        }}
+      <Tabs.Screen 
+        name="wardrobe" 
+        options={{ tabBarIcon: ({ focused }) => <TabIcon icon={ShoppingBag} focused={focused} /> }} 
       />
-      <Tabs.Screen
-        name="history"
-        options={{
-          title: 'History',
-          tabBarIcon: ({ color, focused }) => <History size={22} color={color} strokeWidth={focused ? 2.5 : 2} />,
-        }}
+      <Tabs.Screen 
+        name="profile" 
+        options={{ tabBarIcon: ({ focused }) => <TabIcon icon={User} focused={focused} /> }} 
       />
-      <Tabs.Screen
-        name="profile"
-        options={{
-          title: 'Profile',
-          tabBarIcon: ({ color, focused }) => <User size={22} color={color} strokeWidth={focused ? 2.5 : 2} />,
-        }}
-      />
+      
+      {/* Hidden tabs that we navigate to */}
+      <Tabs.Screen name="trends" options={{ href: null }} />
+      <Tabs.Screen name="history" options={{ href: null }} />
+      <Tabs.Screen name="recommend" options={{ href: null }} />
     </Tabs>
-  )
+  );
 }
-
-const styles = StyleSheet.create({
-  tabBar: {
-    position: 'absolute',
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-    elevation: 0,
-    height: Platform.OS === 'ios' ? 88 : 72,
-    paddingBottom: Platform.OS === 'ios' ? 32 : 12,
-    paddingTop: 12,
-    backgroundColor: 'rgba(255,255,255,0.85)',
-    ...SHADOWS.minimal,
-  },
-  label: { fontSize: 10, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 4 },
-  dot: {
-    position: 'absolute', top: -1, right: -4,
-    width: 6, height: 6, borderRadius: 3,
-    backgroundColor: COLORS.brand,
-  },
-})

@@ -6,43 +6,39 @@ import { logger }          from '../config/logger'
 import { env }             from '../config/env'
 import { metrics }         from '../utils/metrics'
 
-// RFC 7807 PROBLEM DETAILS
-const BASE_URI = 'https://api.ai-fashion.app/problems'
-
-export interface ProblemDetails {
-  type: string; title: string; status: number; detail: string
-  instance?: string; traceId?: string
-  errors?: Array<{ field: string; message: string }>
-}
-
 export function problemDetails(
-  status: number, detail: string, traceId: string, extra?: Partial<ProblemDetails>,
-): ProblemDetails {
-  const titleMap: Record<number, string> = {
-    400:'Bad Request',401:'Unauthorized',403:'Forbidden',404:'Not Found',
-    409:'Conflict',422:'Unprocessable Entity',429:'Too Many Requests',
-    500:'Internal Server Error',503:'Service Unavailable',
-  }
-  const typeMap: Record<number, string> = {
-    400:`${BASE_URI}/bad-request`,401:`${BASE_URI}/unauthorized`,
-    403:`${BASE_URI}/forbidden`,404:`${BASE_URI}/not-found`,
-    409:`${BASE_URI}/conflict`,422:`${BASE_URI}/unprocessable-entity`,
-    429:`${BASE_URI}/rate-limited`,500:`${BASE_URI}/internal-error`,
-    503:`${BASE_URI}/service-unavailable`,
-  }
+  status: number, detail: string, traceId: string, _extra?: any,
+): Record<string, unknown> {
   return {
-    type: typeMap[status] ?? `${BASE_URI}/error`,
-    title: titleMap[status] ?? 'Error',
-    status, detail, instance: `/trace/${traceId}`, traceId, ...extra,
+    success: false,
+    data:    null,
+    error:   detail,
+    traceId,
   }
 }
 
-export function successResponse<T>(data: T, traceId: string, meta?: Record<string, unknown>) {
-  return { success: true, data, traceId, ...(meta ? { meta } : {}) }
+export function successResponse<T>(data: T, traceId: string) {
+  return { 
+    success: true, 
+    data, 
+    error: null, 
+    traceId 
+  }
 }
 
 export function paginatedResponse<T>(items: T[], total: number, page: number, limit: number, traceId: string) {
-  return { success: true, data: items, traceId, meta: { page, limit, total, pages: Math.ceil(total / limit) } }
+  // data must be PaginatedData<T> so AtelierClient.request() extracts it correctly
+  return { 
+    success: true, 
+    data: {
+      items,
+      total,
+      page,
+      pages: Math.ceil(total / limit),
+    }, 
+    error: null, 
+    traceId,
+  }
 }
 
 export function traceMiddleware(req: Request, res: Response, next: NextFunction): void {
@@ -52,15 +48,24 @@ export function traceMiddleware(req: Request, res: Response, next: NextFunction)
 }
 
 export function requestLogger(req: Request, res: Response, next: NextFunction): void {
-  const start = Date.now()
+  const startNs = process.hrtime.bigint()
   res.on('finish', () => {
-    const duration = (Date.now() - start) / 1000
-    const route = req.route?.path ?? req.path
-    const status = String(res.statusCode)
-    metrics.httpRequestDuration.observe({ method: req.method, route, status_code: status }, duration)
+    const durationMs = Number(process.hrtime.bigint() - startNs) / 1_000_000
+    const route      = req.route?.path ?? req.path
+    const status     = String(res.statusCode)
+    // Add X-Response-Time for client-side and APM visibility
+    res.setHeader('X-Response-Time', `${Math.round(durationMs)}ms`)
+    metrics.httpRequestDuration.observe({ method: req.method, route, status_code: status }, durationMs / 1000)
     metrics.httpRequestTotal.inc({ method: req.method, route, status_code: status })
-    logger.info({ traceId: req.traceId, userId: req.userId ?? 'anonymous', method: req.method,
-      path: req.path, status: res.statusCode, latencyMs: Date.now() - start, ip: req.ip }, 'request completed')
+    logger.info({
+      traceId:    req.traceId,
+      userId:     req.userId ?? 'anonymous',
+      method:     req.method,
+      path:       req.path,
+      status:     res.statusCode,
+      durationMs: Math.round(durationMs),
+      ip:         req.ip,
+    }, 'request completed')
   })
   next()
 }
@@ -88,36 +93,54 @@ export const aiRateLimiter = rateLimit({
 
 export function errorHandler(err: unknown, req: Request, res: Response, _next: NextFunction): void {
   const traceId = req.traceId ?? 'unknown'
+  
   if (err instanceof ZodError) {
     metrics.securityRejections.inc({ reason: 'validation-error' })
     logger.warn({ traceId, errors: err.errors }, 'Validation error')
-    res.status(400).setHeader('Content-Type', 'application/problem+json').json({
-      ...problemDetails(400, 'Validation failed', traceId),
-      errors: err.errors.map((e) => ({ field: e.path.join('.'), message: e.message })),
+    
+    res.status(400).json({
+      success: false,
+      data:    null,
+      error:   'Validation failed',
+      errors:  err.errors.map((e) => ({ field: e.path.join('.'), message: e.message })),
+      traceId,
     })
     return
   }
-  if (err instanceof Error && 'statusCode' in err) {
-    const statusCode = (err as Error & { statusCode: number }).statusCode
-    res.status(statusCode).setHeader('Content-Type', 'application/problem+json')
-      .json(problemDetails(statusCode, err.message, traceId))
+
+  // Handle standardized API errors (from shared or domain)
+  if (err instanceof Error) {
+    const status = (err as any).status || (err as any).statusCode || 500
+    
+    if (status >= 500) {
+      logger.error({ traceId, err, userId: req.userId }, 'Unhandled server error')
+    } else {
+      logger.warn({ traceId, status, message: err.message }, 'Client-facing domain error')
+    }
+
+    res.status(status).json(problemDetails(
+      status, 
+      status >= 500 && env.NODE_ENV === 'production' ? 'Internal server error' : err.message, 
+      traceId
+    ))
     return
   }
-  const message = err instanceof Error ? err.message : 'Internal server error'
-  logger.error({ traceId, err, userId: req.userId }, 'Unhandled error')
-  res.status(500).setHeader('Content-Type', 'application/problem+json').json({
-    ...problemDetails(500, 'Something went wrong. Please try again.', traceId),
-    ...(env.NODE_ENV !== 'production' && { debug: message }),
-  })
+
+  // Fallback for non-error throws
+  logger.error({ traceId, err, userId: req.userId }, 'Unknown throw detected')
+  res.status(500).json(problemDetails(500, 'Internal server error', traceId))
 }
 
 export function validateBody<T>(schema: ZodSchema<T>) {
   return (req: Request, res: Response, next: NextFunction): void => {
     const result = schema.safeParse(req.body)
     if (!result.success) {
-      res.status(400).setHeader('Content-Type', 'application/problem+json').json({
-        ...problemDetails(400, 'Invalid request body', req.traceId),
-        errors: result.error.errors.map((e) => ({ field: e.path.join('.'), message: e.message })),
+      res.status(400).json({
+        success: false,
+        data:    null,
+        error:   'Invalid request body',
+        errors:  result.error.errors.map((e) => ({ field: e.path.join('.'), message: e.message })),
+        traceId: req.traceId,
       })
       return
     }
@@ -130,9 +153,12 @@ export function validateQuery<T>(schema: ZodSchema<T>) {
   return (req: Request, res: Response, next: NextFunction): void => {
     const result = schema.safeParse(req.query)
     if (!result.success) {
-      res.status(400).setHeader('Content-Type', 'application/problem+json').json({
-        ...problemDetails(400, 'Invalid query parameters', req.traceId),
-        errors: result.error.errors.map((e) => ({ field: e.path.join('.'), message: e.message })),
+      res.status(400).json({
+        success: false,
+        data:    null,
+        error:   'Invalid query parameters',
+        errors:  result.error.errors.map((e) => ({ field: e.path.join('.'), message: e.message })),
+        traceId: req.traceId,
       })
       return
     }

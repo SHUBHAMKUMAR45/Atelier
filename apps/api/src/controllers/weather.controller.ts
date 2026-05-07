@@ -8,10 +8,10 @@ export async function getWeather(req: Request, res: Response, next: NextFunction
     const lon = Number(req.query['lon'])
     if (isNaN(lat) || isNaN(lon)) {
       res.status(400).setHeader('Content-Type', 'application/problem+json')
-        .json(problemDetails(400, 'lat and lon query parameters are required and must be numbers', req.traceId))
+        .json(problemDetails(400, 'lat and lon query parameters are required and must be numbers', req.traceId ?? ""))
       return
     }
     const weather = await weatherService.getWeather(lat, lon)
-    res.json(successResponse(weather, req.traceId))
+    res.json(successResponse(weather, req.traceId ?? ""))
   } catch (err) { next(err) }
 }

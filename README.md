@@ -63,81 +63,59 @@ docker-compose up   # API + local MongoDB
 
 ## Architecture
 
+The system follows a **Zero-Trust Persistence** and **Resilient Communication** model:
+
 ```
-Gemini → OpenAI → Cache → Degraded Response
-         (circuit breaker per provider)
-         (3x retry with exponential backoff)
-         (in-flight request deduplication)
+[FRONTEND] 3x Exponential Backoff Retry → [API] Zod Validation → [SERVICE] Read-after-Write Verify → [DB]
 ```
 
-Key guarantees:
-- **Never crashes** on AI failure — always returns valid degraded response
-- **Atomic quota** — MongoDB `findOneAndUpdate` with `$lt` guard
-- **userId-scoped** — every DB query filtered by authenticated user
-- **Prompt injection defense** — all user input sanitized before LLM
-- **Partial responses** — text returned immediately, images async
-
----
-
-## Deployment
-
-### API → Render
-1. Connect repo in Render dashboard
-2. Point to `render.yaml`
-3. Set secrets in Render Environment panel
-4. Push to `main` → auto-deploy triggers
-
-### Web → Vercel
-1. Import repo in Vercel dashboard
-2. Set root dir to `apps/web`
-3. Add env vars from `.env.example`
-4. Push to `main` → auto-deploy triggers
-
-### Required GitHub Secrets
-
-| Secret | Where to get |
-|--------|-------------|
-| `RENDER_DEPLOY_HOOK_URL` | Render → Settings → Deploy Hook |
-| `VERCEL_TOKEN` | Vercel → Account → Tokens |
-| `VERCEL_ORG_ID` | Vercel → Settings |
-| `VERCEL_PROJECT_ID` | Vercel → Project → Settings |
-| `MONGODB_URI_TEST` | MongoDB Atlas test cluster |
-| `GEMINI_API_KEY` | Google AI Studio |
-| `OPENAI_API_KEY` | OpenAI Platform |
-| `CLERK_SECRET_KEY` | Clerk Dashboard |
-| `CODECOV_TOKEN` | Codecov.io |
+### Key Guarantees:
+- **Zero-Trust Persistence**: Every DB write in the Profile service is verified with an immediate follow-up read to guarantee data integrity.
+- **Standardized API Contract**: Every response follows the unified `{ success: boolean, data: T | null, error: string | null, traceId: string }` signature.
+- **Fail-Safe AI**: Gemini → OpenAI → Local Cache → Degraded Response (circuit breakers per provider).
+- **Atomic Quota**: MongoDB `findOneAndUpdate` with `$lt` guard prevents over-usage.
+- **Input Sanitization**: Deep recursive sanitization prevents prototype pollution and XSS.
 
 ---
 
 ## API Reference
 
+**Standard Response Format:**
+```json
+{
+  "success": true,
+  "data": { ... },
+  "error": null,
+  "traceId": "ae82..."
+}
 ```
-Base URL: https://api.ai-fashion.app/api/v1
 
-POST   /recommend                → Generate outfit
-GET    /recommend/history        → Paginated history
-GET    /recommend/:id            → Single outfit
-DELETE /recommend/:id            → Delete
-POST   /feedback/:id             → Like / dislike
-GET    /feedback/saved           → Saved outfits
-GET    /profile                  → Get profile
-POST   /profile/setup            → Create/update
-PATCH  /profile/measurements     → Update measurements
-PATCH  /profile/preferences      → Update preferences
-GET    /quota                    → Daily quota status
-GET    /trends                   → Fashion trends
-GET    /weather?lat=&lon=        → Weather context
-GET    /health                   → Liveness check
-```
+### Endpoints (v1)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/recommend` | Generate outfit (AI) |
+| GET | `/recommend/history` | Paginated history |
+| POST | `/profile/setup` | Create/Verify user profile |
+| GET | `/profile/me` | Current user profile |
+| PATCH | `/profile/measurements` | Update body measurements |
+| PATCH | `/profile/preferences` | Update style preferences |
+| GET | `/wardrobe` | List wardrobe items |
+| POST | `/wardrobe` | Add new item |
+| GET | `/health` | Liveness & Readiness check |
 
 ---
 
-## SLOs
+## Testing & QA
 
-| Metric | Target |
-|--------|--------|
-| P95 recommendation latency | < 10s |
-| Cached response latency | < 500ms |
-| Availability | ≥ 99% |
-| Error rate | < 1% |
-| Daily quota per user | 5 requests |
+```bash
+# Unit & Integration Tests
+npm run test
+
+# Persistence Verification (Manual)
+npm run test:persistence
+
+# System Smoke Test (E2E)
+# Requires running API with BYPASS_AUTH=true and NODE_ENV=development
+npm run smoke-test
+```

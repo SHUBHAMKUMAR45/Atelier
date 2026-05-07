@@ -1,190 +1,108 @@
-import { useState }        from 'react'
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, Dimensions } from 'react-native'
-import { SafeAreaView }    from 'react-native-safe-area-context'
-import { useSignIn }       from '@clerk/clerk-expo'
-import { useRouter }       from 'expo-router'
-import * as Haptics        from 'expo-haptics'
-import { COLORS, SHADOWS, SPACING } from '../theme'
+import { useState } from 'react';
+import { View, KeyboardAvoidingView, Platform, TouchableOpacity } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSignIn } from '@clerk/clerk-expo';
+import { useRouter } from 'expo-router';
+import { Mail, Lock, Eye, EyeOff } from 'lucide-react-native';
+import { Image } from 'expo-image';
+import * as Haptics from 'expo-haptics';
 
-const { width } = Dimensions.get('window')
+import { Input } from '../components/ui/Input';
+import { Button } from '../components/ui/Button';
+import { Typography } from '../components/ui/Typography';
 
 export default function SignInScreen() {
-  const { signIn, setActive, isLoaded } = useSignIn()
-  const router                          = useRouter()
-  const [email, setEmail]               = useState('')
-  const [password, setPassword]         = useState('')
-  const [error, setError]               = useState<string | null>(null)
-  const [loading, setLoading]           = useState(false)
+  const { signIn, setActive, isLoaded } = useSignIn();
+  const router = useRouter();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPass, setShowPass] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
   async function handleSignIn() {
-    if (!isLoaded || loading) return
-    setLoading(true)
-    setError(null)
-
+    if (!isLoaded || loading) return;
+    setLoading(true); setError(null);
     try {
-      const result = await signIn.create({ identifier: email, password })
+      const result = await signIn.create({ identifier: email, password });
       if (result.status === 'complete') {
-        await setActive({ session: result.createdSessionId })
-        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
-        router.replace('/(tabs)')
+        await setActive({ session: result.createdSessionId });
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        router.replace('/(tabs)');
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Sign in failed'
-      setError(msg)
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
-    } finally {
-      setLoading(false)
-    }
+      setError(err instanceof Error ? err.message : 'Sign in failed');
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally { setLoading(false); }
   }
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.kav}
-      >
-        <View style={styles.content}>
-          {/* Brand */}
-          <View style={styles.brandSection}>
-            <View style={styles.logoBox}>
-              <View style={styles.logoDot} />
+    <SafeAreaView className="flex-1 bg-background" edges={['top']}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} className="flex-1">
+        <View className="flex-1">
+          {/* Hero image section */}
+          <View className="h-60 relative">
+            <Image
+              source={{ uri: 'https://images.unsplash.com/photo-1469334031218-e382a71b716b?q=80&w=800&auto=format&fit=crop' }}
+              className="w-full h-full"
+              contentFit="cover"
+            />
+            <View className="absolute inset-0 bg-[#111111]/40 items-center justify-center">
+              <View className="px-6 py-2.5 border-2 border-white/60 rounded-lg">
+                <Typography variant="display" className="text-white text-xl tracking-[6px] uppercase">
+                  ATELIER
+                </Typography>
+              </View>
             </View>
-            <Text style={styles.brandName}>Atelier</Text>
-            <Text style={styles.tagline}>THE FUTURE OF WARDROBE</Text>
           </View>
 
-          <View style={styles.card}>
-            <View style={styles.formContainer}>
-              <Text style={styles.welcomeTitle}>Welcome Back</Text>
-              <Text style={styles.welcomeSub}>Please enter your details to sign in</Text>
+          {/* Card */}
+          <View className="flex-1 bg-white -mt-5 rounded-t-[24px] px-6 pt-8 shadow-[0_-4px_24px_rgba(17,17,17,0.08)]">
+            <Typography variant="heading" className="text-2xl mb-1">Welcome back</Typography>
+            <Typography variant="body" className="mb-6 text-secondary">Sign in to your personal stylist</Typography>
 
-              {/* Form */}
-              <View style={styles.form}>
-                <View style={styles.field}>
-                  <Text style={styles.fieldLabel}>Email</Text>
-                  <View style={styles.inputWrapper}>
-                    <TextInput
-                      style={styles.input}
-                      value={email}
-                      onChangeText={setEmail}
-                      placeholder="you@email.com"
-                      placeholderTextColor={COLORS.secondary}
-                      keyboardType="email-address"
-                      autoCapitalize="none"
-                    />
-                  </View>
-                </View>
-
-                <View style={styles.field}>
-                  <Text style={styles.fieldLabel}>Password</Text>
-                  <View style={styles.inputWrapper}>
-                    <TextInput
-                      style={styles.input}
-                      value={password}
-                      onChangeText={setPassword}
-                      placeholder="••••••••"
-                      placeholderTextColor={COLORS.secondary}
-                      secureTextEntry
-                    />
-                  </View>
-                </View>
-
-                {error && <Text style={styles.error}>{error}</Text>}
-
-                <TouchableOpacity
-                  onPress={handleSignIn}
-                  disabled={loading || !email || !password}
-                  activeOpacity={0.8}
-                  style={[styles.signInBtn, (loading || !email || !password) && styles.signInBtnDisabled]}
-                >
-                  <Text style={styles.signInText}>
-                    {loading ? 'Signing in...' : 'Sign In'}
-                  </Text>
+            <Input
+              label="Email"
+              value={email}
+              onChangeText={setEmail}
+              placeholder="you@email.com"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              leftIcon={<Mail size={18} color="#6B7280" />}
+            />
+            <Input
+              label="Password"
+              value={password}
+              onChangeText={setPassword}
+              placeholder="••••••••"
+              secureTextEntry={!showPass}
+              leftIcon={<Lock size={18} color="#6B7280" />}
+              rightIcon={
+                <TouchableOpacity onPress={() => setShowPass(!showPass)}>
+                  {showPass ? <EyeOff size={18} color="#6B7280" /> : <Eye size={18} color="#6B7280" />}
                 </TouchableOpacity>
+              }
+              rightAction={{ label: 'Forgot?', onPress: () => {} }}
+            />
 
-                <TouchableOpacity
-                  style={styles.signUpLink}
-                  onPress={() => router.push('/sign-up')}
-                >
-                  <Text style={styles.signUpText}>
-                    New here?{' '}
-                    <Text style={styles.signUpHighlight}>Create account</Text>
-                  </Text>
-                </TouchableOpacity>
-              </View>
+            {error && <Typography variant="caption" className="text-error text-center font-dmsans-medium mb-3">{error}</Typography>}
+
+            <Button 
+              label="Sign In" 
+              onPress={handleSignIn} 
+              loading={loading} 
+              className="w-full h-14 mt-2 mb-5"
+            />
+
+            <View className="flex-row justify-center items-center">
+              <Typography variant="body" className="text-secondary">New to Atelier? </Typography>
+              <TouchableOpacity onPress={() => router.push('/sign-up')} hitSlop={10}>
+                <Typography variant="bodyBold" className="text-primary">Create account</Typography>
+              </TouchableOpacity>
             </View>
           </View>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
-  )
+  );
 }
-
-const styles = StyleSheet.create({
-  safe:     { flex: 1, backgroundColor: COLORS.secondaryBackground },
-  kav:      { flex: 1 },
-  content:  { flex: 1, padding: 24, justifyContent: 'center' },
-
-  brandSection: { alignItems: 'center', marginBottom: 40 },
-  logoBox: {
-    width: 64, height: 64, borderRadius: 24,
-    backgroundColor: '#FFFFFF',
-    alignItems: 'center', justifyContent: 'center',
-    marginBottom: 16,
-    ...SHADOWS.minimal,
-  },
-  logoDot: {
-    width: 14, height: 14, borderRadius: 7, backgroundColor: COLORS.brand,
-  },
-  brandName: { 
-    fontSize: 32, fontWeight: '900', color: COLORS.primary, letterSpacing: -0.5,
-  },
-  tagline: { 
-    fontSize: 10, fontWeight: '800', color: COLORS.secondary, 
-    letterSpacing: 2, marginTop: 4, textTransform: 'uppercase'
-  },
-
-  card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    ...SHADOWS.card,
-  },
-  formContainer: {
-    padding: 32,
-  },
-  welcomeTitle: { fontSize: 24, fontWeight: '900', color: COLORS.primary, textAlign: 'center' },
-  welcomeSub: { fontSize: 14, color: COLORS.secondary, textAlign: 'center', marginTop: 8, fontWeight: '600' },
-
-  form:       { gap: 20, marginTop: 32 },
-  field:      { gap: 8 },
-  fieldLabel: {
-    fontSize: 12, fontWeight: '800', color: COLORS.primary,
-    marginLeft: 4,
-  },
-  inputWrapper: {
-    backgroundColor: COLORS.secondaryBackground,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: 'transparent',
-  },
-  input: {
-    padding: 16,
-    fontSize: 16, color: COLORS.primary,
-    fontWeight: '600',
-  },
-
-  error: { fontSize: 14, color: COLORS.error, fontWeight: '600', marginTop: 4, textAlign: 'center' },
-
-  signInBtn: {
-    backgroundColor: COLORS.brand,
-    borderRadius: 18, paddingVertical: 18,
-    alignItems: 'center', justifyContent: 'center',
-    marginTop: 12,
-  },
-  signInBtnDisabled: { opacity: 0.5 },
-  signInText: { fontSize: 16, fontWeight: '800', color: '#FFFFFF' },
-
-  signUpLink: { alignItems: 'center', marginTop: 16 },
-  signUpText:      { fontSize: 14, color: COLORS.secondary, fontWeight: '600' },
-  signUpHighlight: { color: COLORS.brand, fontWeight: '900' },
-})

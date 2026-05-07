@@ -31,7 +31,7 @@ const EnvSchema = z.object({
   CACHE_TTL_TREND_HOURS:  z.coerce.number().default(24),
   CACHE_TTL_WEATHER_MINS: z.coerce.number().default(30),
 
-  ALLOWED_ORIGINS: z.string().default('http://localhost:3000'),
+  ALLOWED_ORIGINS: z.string().default('http://localhost:3000,http://localhost:4000,http://localhost:8081'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
 
   ADMIN_METRICS_TOKEN: z.string().optional(),
@@ -65,4 +65,14 @@ function loadEnv() {
 }
 
 export const env = loadEnv()
+
+// ── Runtime warnings ───────────────────────────────────────────────
+if (env.NODE_ENV === 'production' && env.MONGODB_URI.includes('localhost')) {
+  console.error('❌ MONGODB_URI points to localhost in production. Use MongoDB Atlas.')
+  process.exit(1)
+}
+if (env.NODE_ENV !== 'test' && env.MONGODB_URI.includes('localhost')) {
+  console.warn('⚠️  MONGODB_URI uses localhost. Set a real MongoDB Atlas URI for persistent data.')
+  console.warn('   Free cluster: https://cloud.mongodb.com')
+}
 export type Env = z.infer<typeof EnvSchema>

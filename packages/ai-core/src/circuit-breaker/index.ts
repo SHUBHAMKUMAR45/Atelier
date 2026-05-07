@@ -108,15 +108,16 @@ export class CircuitBreaker {
   }
 
   private withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-    return Promise.race([
-      promise,
-      new Promise<T>((_, reject) =>
-        setTimeout(
-          () => reject(new Error(`Circuit breaker timeout after ${ms}ms`)),
-          ms,
-        ),
-      ),
-    ])
+    return new Promise<T>((resolve, reject) => {
+      const handle = setTimeout(
+        () => reject(new Error(`Circuit breaker timeout after ${ms}ms`)),
+        ms,
+      )
+      promise.then(
+        (val) => { clearTimeout(handle); resolve(val) },
+        (err) => { clearTimeout(handle); reject(err)  },
+      )
+    })
   }
 
   isAvailable(): boolean {

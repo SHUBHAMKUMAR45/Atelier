@@ -12,7 +12,7 @@ export class MaintenanceService {
       await Promise.all([
         this.expireRecommendations(),
         this.expireCache(),
-        this.syncIndexes(),
+        // syncIndexes() intentionally excluded — already called at bootstrap (index.ts)
       ])
       
       logger.info('All maintenance tasks completed successfully')

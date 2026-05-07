@@ -12,3 +12,6 @@ coverage
 *.md
 apps/web
 apps/mobile
+
+# Secrets — never copy into image
+*.env

@@ -21,6 +21,8 @@ WORKDIR /app
 COPY --from=deps /app/node_modules         ./node_modules
 COPY --from=deps /app/apps/api/node_modules ./apps/api/node_modules
 COPY . .
+# Explicitly delete any .env files that may have been copied in — never bake secrets into the image
+RUN find . -name ".env" -not -name ".env.example" -delete &&     find . -name ".env.local" -delete &&     find . -name ".env.production" -delete &&     find . -name ".env.staging" -delete
 RUN pnpm turbo run build --filter=@ai-fashion/shared --filter=@ai-fashion/ai-core
 RUN pnpm turbo run build --filter=@ai-fashion/api
 
@@ -47,6 +49,8 @@ USER apiuser
 WORKDIR /app/apps/api
 
 EXPOSE 4000
+
+ENV NODE_ENV=production
 
 # dumb-init for proper signal handling
 ENTRYPOINT ["/usr/bin/dumb-init", "--"]

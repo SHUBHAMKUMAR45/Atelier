@@ -1,6 +1,7 @@
-import express from 'express'
-import cors    from 'cors'
-import helmet  from 'helmet'
+import express  from 'express'
+import cors     from 'cors'
+import helmet   from 'helmet'
+import mongoose from 'mongoose'
 import { env }        from './config/env'
 import { logger }     from './config/logger'
 import { connectDB }  from './db/connection'
@@ -26,16 +27,17 @@ import wardrobeRoutes  from './routes/wardrobe.routes'
 // ─────────────────────────────────────────────────────────────────
 
 async function bootstrap() {
-  await connectDB()
-
-  // Initialize maintenance service
-  const maintenanceService = new MaintenanceService()
+  // SKIP_DB=true starts HTTP without DB — for validation/auth testing only
+  const skipDB = process.env['SKIP_DB'] === 'true'
   
-  // Sync indexes on startup
-  await maintenanceService.syncIndexes()
-  
-  // Schedule ongoing maintenance
-  scheduleDailyMaintenance(maintenanceService)
+  if (!skipDB) {
+    await connectDB()
+    const maintenanceService = new MaintenanceService()
+    await maintenanceService.syncIndexes()
+    scheduleDailyMaintenance(maintenanceService)
+  } else {
+    logger.warn('SKIP_DB=true — HTTP started without database (limited testing mode)')
+  }
 
   const app = express()
 
@@ -82,12 +84,18 @@ async function bootstrap() {
     })
   })
 
-  app.get('/health', async (_req, res) => {
-    res.json({
-      status:    'ok',
+  app.get('/health', (_req, res) => {
+    const dbStatus = mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
+    
+    const isOk = dbStatus === 'connected'
+    res.status(isOk ? 200 : 503).json({
+      status:    isOk ? 'ok' : 'degraded',
       timestamp: new Date().toISOString(),
       version:   '2.0.0',
       uptime:    Math.floor(process.uptime()),
+      services: {
+        database: dbStatus
+      }
     })
   })
 
@@ -117,16 +125,12 @@ async function bootstrap() {
 
   // ── 404 handler ───────────────────────────────────────────────
   app.use((req, res) => {
-    res.status(404)
-      .setHeader('Content-Type', 'application/problem+json')
-      .json({
-        type:     'https://api.ai-fashion.app/problems/not-found',
-        title:    'Not Found',
-        status:   404,
-        detail:   `Route ${req.method} ${req.path} not found`,
-        instance: `/trace/${req.traceId}`,
-        traceId:  req.traceId,
-      })
+    res.status(404).json({
+      success: false,
+      data:    null,
+      error:   `Route ${req.method} ${req.path} not found`,
+      traceId: req.traceId,
+    })
   })
 
   // ── Global error handler ──────────────────────────────────────

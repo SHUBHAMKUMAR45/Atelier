@@ -100,29 +100,61 @@ export class AIOrchestrator {
     if (cached) return { data: cached, provider: 'cached', latencyMs: Date.now() - start }
 
     const prompt = buildOutfitPrompt(input)
+    const timeoutThreshold = 2500 // 2.5s staggered trigger
 
-    if (this.cbGemini.isAvailable()) {
-      try {
-        const raw  = await withRetry(() => this.cbGemini.execute(() => this.gemini.generateOutfit(prompt)), { maxAttempts: 3, baseDelayMs: 1000 })
-        const data = AIOutfitOutputSchema.parse(raw)   // re-validate at orchestrator level
-        await setCached(data)
-        return { data, provider: 'gemini', latencyMs: Date.now() - start }
-      } catch { /* fallthrough */ }
+    const executeProvider = async (
+      provider: 'gemini' | 'openai', 
+      cb: CircuitBreaker, 
+      genFn: (p: string) => Promise<unknown>
+    ): Promise<OrchestratorResult<AIOutfitOutput>> => {
+      if (!cb.isAvailable()) throw new Error(`Provider ${provider} unavailable`)
+      const raw  = await withRetry(() => cb.execute(() => genFn(prompt)), { maxAttempts: 2, baseDelayMs: 500 })
+      const data = AIOutfitOutputSchema.parse(raw)
+      await setCached(data)
+      return { data, provider, latencyMs: Date.now() - start }
     }
 
-    if (this.cbOpenAI.isAvailable()) {
+    // Cancellation flag — prevents OpenAI from firing if Gemini wins first
+    let cancelled = false
+    let openaiTimerHandle: ReturnType<typeof setTimeout> | null = null
+
+    const geminiTask = executeProvider('gemini', this.cbGemini, (p) => this.gemini.generateOutfit(p))
+
+    // OpenAI only starts after 2.5s, and only if Gemini hasn't won yet
+    const openaiTrigger = new Promise<OrchestratorResult<AIOutfitOutput>>((resolve, reject) => {
+      openaiTimerHandle = setTimeout(() => {
+        if (cancelled) return  // Gemini already won — skip OpenAI entirely
+        executeProvider('openai', this.cbOpenAI, (p) => this.openai.generateOutfit(p))
+          .then(resolve)
+          .catch(reject)
+      }, timeoutThreshold)
+    })
+
+    try {
+      const winner = await Promise.race([geminiTask, openaiTrigger])
+      // Cancel any pending OpenAI call
+      cancelled = true
+      if (openaiTimerHandle !== null) clearTimeout(openaiTimerHandle)
+      return winner
+    } catch (err) {
+      cancelled = true
+      if (openaiTimerHandle !== null) clearTimeout(openaiTimerHandle)
+
+      if (err instanceof CircuitOpenError) { /* ignore and try final fallback */ }
+
+      // Final attempt: try both sequentially
       try {
-        const raw  = await withRetry(() => this.cbOpenAI.execute(() => this.openai.generateOutfit(prompt)), { maxAttempts: 3, baseDelayMs: 1000 })
-        const data = AIOutfitOutputSchema.parse(raw)   // re-validate at orchestrator level
-        await setCached(data)
-        return { data, provider: 'openai', latencyMs: Date.now() - start }
-      } catch { /* fallthrough */ }
+        return await geminiTask
+      } catch {
+        try {
+          return await executeProvider('openai', this.cbOpenAI, (p) => this.openai.generateOutfit(p))
+        } catch {
+          const fallback = await getCached()
+          if (fallback) return { data: fallback, provider: 'cached', latencyMs: Date.now() - start }
+          return { data: buildDegradedOutfitResponse(input), provider: 'cached', latencyMs: Date.now() - start }
+        }
+      }
     }
-
-    const fallback = await getCached()
-    if (fallback) return { data: fallback, provider: 'cached', latencyMs: Date.now() - start }
-
-    return { data: buildDegradedOutfitResponse(input), provider: 'cached', latencyMs: Date.now() - start }
   }
 
   async generateTrends(

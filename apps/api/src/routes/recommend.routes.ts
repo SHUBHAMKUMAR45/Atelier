@@ -12,7 +12,6 @@ router.use(authMiddleware)
 
 router.post(   '/',        aiRateLimiter, validateBody(RecommendRequestSchema), ctrl.generate)
 router.get(    '/history', validateQuery(PaginationSchema),                     ctrl.getHistory)
-router.get(    '/saved',                                                         ctrl.getSaved)
 router.get(    '/:id',                                                           ctrl.getById)
 router.delete( '/:id',                                                           ctrl.remove)
 
